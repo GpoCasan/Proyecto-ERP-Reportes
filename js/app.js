@@ -11,6 +11,10 @@ function switchModule(moduleName) {
     if (activeCard) {
         activeCard.classList.add('active');
     }
+    
+    // Disparar evento personalizado para la alerta de transferencias
+    const event = new CustomEvent('moduleChanged', { detail: { module: moduleName } });
+    document.dispatchEvent(event);
 }
 
 // Inicializar eventos de navegación
@@ -136,6 +140,9 @@ function initNavigation() {
             if (moduleName === 'facturas' && typeof initFacturasModule === 'function') {
                 setTimeout(initFacturasModule, 100);
             }
+            if (moduleName === 'transferencias_pendientes' && typeof initTransferenciasPendientesModule === 'function') {
+                setTimeout(initTransferenciasPendientesModule, 100);
+            }
         });
     });
 }
@@ -217,6 +224,47 @@ function initFacturasIfNeeded() {
     }
 }
 
+// ==================== INICIALIZAR MÓDULO DE TRANSFERENCIAS PENDIENTES ====================
+function initTransferenciasPendientesIfNeeded() {
+    const module = document.getElementById('transferencias_pendientesModule');
+    if (module && module.classList.contains('active-module')) {
+        if (typeof initTransferenciasPendientesModule === 'function') {
+            setTimeout(initTransferenciasPendientesModule, 100);
+        }
+    }
+}
+
+// ==================== INICIALIZAR ALERTA DE TRANSFERENCIAS ====================
+function initAlertasTransferencias() {
+    // Esperar a que el usuario esté autenticado
+    const checkLogin = setInterval(() => {
+        const userBar = document.getElementById('userInfoBar');
+        if (userBar && userBar.style.display !== 'none') {
+            clearInterval(checkLogin);
+            console.log('🔐 Usuario autenticado, verificando transferencias...');
+            setTimeout(() => {
+                if (typeof verificarTransferenciasPendientes === 'function') {
+                    verificarTransferenciasPendientes();
+                }
+            }, 1500);
+        }
+    }, 500);
+
+    // También ejecutar cuando se cambie de módulo (por si el login fue posterior)
+    document.addEventListener('moduleChanged', function() {
+        const userBar = document.getElementById('userInfoBar');
+        if (userBar && userBar.style.display !== 'none') {
+            if (typeof verificarTransferenciasPendientes === 'function') {
+                // Verificar si ya se cargó la alerta para no duplicar
+                const alertaExistente = document.getElementById('alertaTransferenciasContainer');
+                if (!alertaExistente) {
+                    verificarTransferenciasPendientes();
+                }
+            }
+        }
+    });
+}
+
 // Ejecutar inicialización después de que el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializar autenticación primero
@@ -237,6 +285,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Inicializar módulo de facturas si es necesario
     initFacturasIfNeeded();
+    
+    // Inicializar módulo de transferencias pendientes si es necesario
+    initTransferenciasPendientesIfNeeded();
+    
+    // Inicializar alerta de transferencias pendientes
+    if (typeof initAlertasTransferencias === 'function') {
+        initAlertasTransferencias();
+    }
     
     // Configurar el botón de limpiar en inventario si existe
     const clearProductBtn = document.getElementById('clearProductBtn');

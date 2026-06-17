@@ -2038,3 +2038,36 @@ code {
         padding: 1px 4px;
     }
 }
+/* ==================== ALERTA TRANSFERENCIAS ==================== */
+
+#alertaTransferenciasContainer {
+    animation: slideDown 0.5s ease-out;
+}
+
+#alertaTransferenciasContainer .badge-tienda {
+    background: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #1e40af;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#alertaTransferenciasContainer .badge-tienda .count {
+    background: #f97316;
+    color: white;
+    border-radius: 50%;
+    padding: 0 8px;
+    font-size: 0.7rem;
+    min-width: 18px;
+    text-align: center;
+}
+
+#cerrarAlertaTransferencias:hover {
+    background: rgba(0,0,0,0.2) !important;
+    transform: scale(1.1);
+}

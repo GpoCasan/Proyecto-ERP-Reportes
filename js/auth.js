@@ -6,7 +6,7 @@ const USERS = {
         password: "admin2026",
         role: "admin",
         name: "Administrador",
-        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas"],
+        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "transferencias_pendientes", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas"],
         showTaeBalance: true
     },
     "comercial": {
@@ -20,7 +20,7 @@ const USERS = {
         password: "operaciones2026",
         role: "operaciones",
         name: "Operaciones",
-        modules: ["inventario", "existencias", "transferencias", "compras", "facturas"],
+        modules: ["inventario", "existencias", "transferencias", "compras"],
         showTaeBalance: false
     },
     "ingresos": {
@@ -33,6 +33,7 @@ const USERS = {
 };
 
 let currentUser = null;
+let alertaTransferenciasMostrada = false;
 
 // Función para mostrar/ocultar módulos según permisos
 function filterModulesByPermissions(modulesAllowed) {
@@ -112,17 +113,33 @@ function updateUIForUser(user) {
     
     // Mostrar/ocultar el SALDO TAE según permisos
     updateTaeBalanceVisibility(user);
+    
+    // ====== NUEVO: Verificar transferencias pendientes para TODOS los usuarios ======
+    setTimeout(() => {
+        if (typeof verificarTransferenciasPendientes === 'function' && !alertaTransferenciasMostrada) {
+            console.log('🔔 Verificando transferencias pendientes para todos los usuarios...');
+            verificarTransferenciasPendientes();
+            alertaTransferenciasMostrada = true;
+        }
+    }, 2000);
 }
 
 // Función para cerrar sesión
 function logout() {
     currentUser = null;
     sessionStorage.removeItem('servicel_user');
+    alertaTransferenciasMostrada = false;
     
     // Ocultar barra de usuario
     const userBar = document.getElementById('userInfoBar');
     if (userBar) {
         userBar.style.display = 'none';
+    }
+    
+    // Eliminar la alerta de transferencias si existe
+    const alertaContainer = document.getElementById('alertaTransferenciasContainer');
+    if (alertaContainer) {
+        alertaContainer.remove();
     }
     
     // Mostrar todas las tarjetas temporalmente para que el login se vea normal
