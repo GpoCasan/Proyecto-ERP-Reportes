@@ -1,4 +1,4 @@
-// ==================== ALERTA DE TRANSFERENCIAS PENDIENTES ====================
+// ==================== ALERTA DE TRANSFERENCIAS PENDIENTES (MODAL) ====================
 
 // Variable para evitar múltiples ejecuciones
 let alertaTransferenciasCargada = false;
@@ -57,7 +57,6 @@ async function verificarTransferenciasPendientes() {
         const tiendasMap = new Map();
 
         allTransfers.forEach(transfer => {
-            // Obtener nombre de la tienda destino
             let tiendaNombre = 'Sin tienda asignada';
             if (transfer.target_warehouse?.branch?.name) {
                 tiendaNombre = transfer.target_warehouse.branch.name;
@@ -82,8 +81,8 @@ async function verificarTransferenciasPendientes() {
         const tiendas = Array.from(tiendasMap.values())
             .sort((a, b) => b.cantidad - a.cantidad);
 
-        // Mostrar la alerta
-        mostrarAlertaTransferencias(tiendas, allTransfers.length);
+        // Mostrar el modal
+        mostrarModalTransferencias(tiendas, allTransfers.length);
 
         alertaTransferenciasCargada = true;
 
@@ -92,145 +91,162 @@ async function verificarTransferenciasPendientes() {
     }
 }
 
-// ==================== MOSTRAR ALERTA ====================
+// ==================== MOSTRAR MODAL ====================
 
-function mostrarAlertaTransferencias(tiendas, totalTransferencias) {
-    // Verificar si ya existe la alerta para no duplicar
-    const alertaExistente = document.getElementById('alertaTransferenciasContainer');
-    if (alertaExistente) {
-        alertaExistente.remove();
+function mostrarModalTransferencias(tiendas, totalTransferencias) {
+    // Verificar si ya existe el modal para no duplicar
+    const modalExistente = document.getElementById('modalTransferenciasPendientes');
+    if (modalExistente) {
+        modalExistente.remove();
     }
 
-    // Crear contenedor de la alerta
-    const container = document.createElement('div');
-    container.id = 'alertaTransferenciasContainer';
-    container.style.cssText = `
-        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-        border-left: 5px solid #f97316;
-        border-radius: 12px;
-        padding: 16px 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
-        animation: slideDown 0.5s ease-out;
-        position: relative;
-    `;
-
-    // Título de la alerta
-    const title = document.createElement('div');
-    title.style.cssText = `
-        display: flex;
+    // Crear el modal
+    const modal = document.createElement('div');
+    modal.id = 'modalTransferenciasPendientes';
+    modal.className = 'modal';
+    modal.style.cssText = `
+        display: flex !important;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 10px;
-    `;
-    title.innerHTML = `
-        <span style="font-size: 1.8rem;">📦</span>
-        <span style="font-weight: 700; font-size: 1.1rem; color: #92400e;">
-            ⚠️ ${totalTransferencias} transferencia(s) en tránsito pendientes de recibir
-        </span>
-        <button id="cerrarAlertaTransferencias" style="
-            margin-left: auto;
-            background: rgba(0,0,0,0.1);
-            border: none;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            font-size: 1.2rem;
-            cursor: pointer;
-            color: #92400e;
-            transition: all 0.2s;
-        ">✕</button>
-    `;
-    container.appendChild(title);
-
-    // Lista de tiendas
-    const listContainer = document.createElement('div');
-    listContainer.style.cssText = `
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 8px;
+        justify-content: center;
+        z-index: 9999;
     `;
 
-    tiendas.forEach(tienda => {
-        const badge = document.createElement('span');
-        badge.style.cssText = `
-            background: white;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #1e40af;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        `;
-        badge.innerHTML = `
-            🏪 ${escapeHtml(tienda.tienda)}
-            <span style="
-                background: #f97316;
-                color: white;
-                border-radius: 50%;
-                padding: 0 8px;
-                font-size: 0.7rem;
-                min-width: 20px;
-                text-align: center;
-            ">${tienda.cantidad}</span>
-        `;
-        listContainer.appendChild(badge);
+    // Contenido del modal
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px; animation: modalFadeIn 0.3s ease-out;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);">
+                <h3 style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.8rem;">📦</span>
+                    <span>Transferencias Pendientes de Recibir</span>
+                </h3>
+                <span class="close-modal" id="cerrarModalTransferencias" style="font-size: 32px; cursor: pointer;">&times;</span>
+            </div>
+            <div class="modal-body" style="padding: 24px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <div style="font-size: 2.5rem; font-weight: 800; color: #ea580c;">
+                        ${totalTransferencias}
+                    </div>
+                    <div style="font-size: 0.9rem; color: #64748b;">
+                        transferencia(s) en tránsito pendientes de recibir
+                    </div>
+                </div>
+
+                <div style="border-top: 2px solid #fef3c7; padding-top: 16px; margin-top: 8px;">
+                    <div style="font-weight: 600; color: #1e40af; margin-bottom: 12px; font-size: 0.9rem;">
+                        🏪 Tiendas con transferencias pendientes:
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                        ${tiendas.map(tienda => `
+                            <div style="
+                                background: #f8fafc;
+                                border: 1px solid #e2e8f0;
+                                border-radius: 10px;
+                                padding: 10px 16px;
+                                display: flex;
+                                align-items: center;
+                                gap: 10px;
+                                flex: 1 1 calc(50% - 10px);
+                                min-width: 150px;
+                            ">
+                                <span style="font-size: 1.2rem;">🏪</span>
+                                <span style="font-weight: 500; color: #1e293b; flex: 1;">${escapeHtml(tienda.tienda)}</span>
+                                <span style="
+                                    background: #f97316;
+                                    color: white;
+                                    border-radius: 50%;
+                                    padding: 2px 10px;
+                                    font-size: 0.8rem;
+                                    font-weight: 700;
+                                    min-width: 24px;
+                                    text-align: center;
+                                ">${tienda.cantidad}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; padding: 12px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f97316;">
+                    <div style="font-size: 0.8rem; color: #92400e;">
+                        ⚠️ Estas transferencias ya fueron enviadas desde el almacén origen y están en camino. 
+                        Por favor, verifica su recepción en las tiendas correspondientes.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="btnVerTransferenciasPendientes" style="
+                    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+                    color: white;
+                    border: none;
+                    padding: 8px 20px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                ">
+                    📋 Ver Detalle
+                </button>
+                <button id="btnCerrarModalTransferencias" style="
+                    background: #64748b;
+                    color: white;
+                    border: none;
+                    padding: 8px 20px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                ">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Evento para cerrar con la X
+    document.getElementById('cerrarModalTransferencias').addEventListener('click', function() {
+        cerrarModalTransferencias();
     });
 
-    container.appendChild(listContainer);
+    // Evento para cerrar con el botón
+    document.getElementById('btnCerrarModalTransferencias').addEventListener('click', function() {
+        cerrarModalTransferencias();
+    });
 
-    // Agregar la alerta después de la barra de usuario
-    const userBar = document.getElementById('userInfoBar');
-    if (userBar) {
-        userBar.parentNode.insertBefore(container, userBar.nextSibling);
-    } else {
-        // Fallback: agregar al inicio del contenedor
-        const containerMain = document.querySelector('.container');
-        if (containerMain) {
-            containerMain.insertBefore(container, containerMain.firstChild);
+    // Evento para ver detalle (abre el módulo de transferencias pendientes)
+    document.getElementById('btnVerTransferenciasPendientes').addEventListener('click', function() {
+        cerrarModalTransferencias();
+        // Cambiar al módulo de transferencias pendientes si existe
+        const navCard = document.querySelector('.nav-card[data-module="transferencias_pendientes"]');
+        if (navCard) {
+            navCard.click();
+        } else {
+            // Si no existe el módulo, mostrar mensaje
+            alert('El módulo de transferencias pendientes no está disponible.');
         }
-    }
+    });
 
-    // Evento para cerrar la alerta
-    const closeBtn = document.getElementById('cerrarAlertaTransferencias');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', function() {
-            container.style.opacity = '0';
-            container.style.transform = 'translateY(-20px)';
-            container.style.transition = 'all 0.3s ease';
-            setTimeout(() => {
-                container.remove();
-            }, 300);
-        });
-    }
+    // Cerrar al hacer clic fuera del modal
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            cerrarModalTransferencias();
+        }
+    });
+}
 
-    // Agregar estilos para la animación si no existen
-    if (!document.querySelector('#alertaTransferenciasStyles')) {
-        const style = document.createElement('style');
-        style.id = 'alertaTransferenciasStyles';
-        style.textContent = `
-            @keyframes slideDown {
-                from {
-                    opacity: 0;
-                    transform: translateY(-20px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-        `;
-        document.head.appendChild(style);
+// ==================== CERRAR MODAL ====================
+
+function cerrarModalTransferencias() {
+    const modal = document.getElementById('modalTransferenciasPendientes');
+    if (modal) {
+        modal.style.opacity = '0';
+        modal.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => {
+            modal.remove();
+        }, 300);
     }
 }
 
 // ==================== EJECUTAR AL INICIO ====================
 
-// Ejecutar después del login
 function initAlertasTransferencias() {
     // Esperar a que el usuario esté autenticado
     const checkLogin = setInterval(() => {
@@ -238,7 +254,11 @@ function initAlertasTransferencias() {
         if (userBar && userBar.style.display !== 'none') {
             clearInterval(checkLogin);
             console.log('🔐 Usuario autenticado, verificando transferencias...');
-            setTimeout(verificarTransferenciasPendientes, 1500);
+            setTimeout(() => {
+                if (typeof verificarTransferenciasPendientes === 'function') {
+                    verificarTransferenciasPendientes();
+                }
+            }, 2000);
         }
     }, 500);
 
@@ -246,7 +266,9 @@ function initAlertasTransferencias() {
     document.addEventListener('moduleChanged', function() {
         const userBar = document.getElementById('userInfoBar');
         if (userBar && userBar.style.display !== 'none' && !alertaTransferenciasCargada) {
-            verificarTransferenciasPendientes();
+            if (typeof verificarTransferenciasPendientes === 'function') {
+                verificarTransferenciasPendientes();
+            }
         }
     });
 }
@@ -254,3 +276,4 @@ function initAlertasTransferencias() {
 // ==================== EXPORTAR FUNCIONES GLOBALES ====================
 window.initAlertasTransferencias = initAlertasTransferencias;
 window.verificarTransferenciasPendientes = verificarTransferenciasPendientes;
+window.cerrarModalTransferencias = cerrarModalTransferencias;
