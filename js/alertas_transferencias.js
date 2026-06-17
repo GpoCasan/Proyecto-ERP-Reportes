@@ -86,9 +86,9 @@ async function verificarTransferenciasPendientes(forzar = false) {
                 if (nombreAlmacen.includes('tae')) {
                     almacenOrigen = 'TAE';
                 } else if (nombreAlmacen.includes('equipos matriz') || nombreAlmacen.includes('equipos matrix')) {
-                    almacenOrigen = 'Equipos Matriz';
+                    almacenOrigen = 'Equipos';
                 } else if (nombreAlmacen.includes('accesorios matriz') || nombreAlmacen.includes('accesorios matrix')) {
-                    almacenOrigen = 'Accesorios Matriz';
+                    almacenOrigen = 'Accesorios';
                 } else {
                     almacenOrigen = 'Otros';
                 }
@@ -423,7 +423,7 @@ function mostrarModalTransferencias(data) {
                         ${data.total}
                     </div>
                     <div style="font-size: 0.85rem; color: #64748b;">
-                        transferencia(s) en tránsito pendientes de recibir
+                        Transferencia(s) en tránsito pendientes de recibir
                     </div>
                 </div>
 
