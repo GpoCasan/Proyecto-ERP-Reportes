@@ -271,6 +271,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof initAuth === 'function') {
         initAuth();
     }
+    // Botón para abrir modal de transferencias pendientes
+        const openTransferenciasBtn = document.getElementById('openTransferenciasBtn');
+        if (openTransferenciasBtn) {
+            openTransferenciasBtn.addEventListener('click', function() {
+                if (typeof abrirModalTransferencias === 'function') {
+                    abrirModalTransferencias();
+                } else {
+                    console.warn('⚠️ La función abrirModalTransferencias no está disponible');
+                }
+            });
+        }
     
     // Configurar el resto de eventos
     initEventListeners();
