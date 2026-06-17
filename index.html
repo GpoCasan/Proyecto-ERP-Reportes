@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>SERVICEL - Sistema de Reportes</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Modal de Login -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-modal">
+            <div class="login-header">
+                <h2>🔐 SERVICEL</h2>
+                <p>Sistema de Reportes</p>
+            </div>
+            <div class="login-body">
+                <div id="loginError" class="login-error"></div>
+                <div class="login-form-group">
+                    <label>👤 Usuario</label>
+                    <input type="text" id="loginUsername" placeholder="Ingresa tu usuario" autocomplete="off">
+                </div>
+                <div class="login-form-group">
+                    <label>🔒 Contraseña</label>
+                    <input type="password" id="loginPassword" placeholder="Ingresa tu contraseña">
+                </div>
+                <button class="login-btn" id="loginBtn">Ingresar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Barra de usuario (oculta inicialmente) -->
+    <div id="userInfoBar" class="user-info-bar" style="display: none;">
+        <div class="user-info">
+            <div class="user-avatar" id="userAvatar">👤</div>
+            <span id="userNameDisplay"></span>
+            <span id="userRoleDisplay" style="background: #f97316; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem;"></span>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <!-- Botón para abrir modal de búsqueda de venta -->
+            <button id="openSaleSearchBtn" style="background: #059669; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                🔍 Buscar Venta
+            </button>
+            <button class="logout-btn" id="logoutBtn">🚪 Cerrar Sesión</button>
+        </div>
+    </div>
+
+    <!-- MODAL PARA BUSCAR VENTA POR NÚMERO -->
+    <div id="saleSearchModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3>🔍 Buscar Venta por Número</h3>
+                <span class="close-modal" onclick="closeSaleSearchModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>📄 Número de Venta:</label>
+                    <input type="number" id="saleNumberInput" placeholder="Ej: 792415" style="width: 100%; padding: 12px; font-size: 1rem;">
+                    <small style="color: #64748b; display: block; margin-top: 8px;">💡 Ingresa solo el número de la venta</small>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="closeSaleSearchModal()" style="background: #64748b; cursor: pointer;">Cancelar</button>
+                <button id="confirmSaleSearchBtn" style="background: #059669; cursor: pointer;">🔍 Abrir Venta</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Logo esquina superior derecha -->
+        <div class="logo-container">
+            <img src="img/logo.png" alt="Logo" class="logo-img" id="companyLogo">
+        </div>
+
+        <div class="saldo-tae-card">
+            <div class="saldo-tae-icon">💰</div>
+            <div class="saldo-tae-info">
+                <div class="saldo-tae-label">SALDO TAE APPS CREATIVAS:</div>
+                <div class="saldo-tae-value" id="saldoTaeValue">Cargando...</div>
+            </div>
+        </div>
+
+        <div class="nav-cards">
+            <div class="nav-card active" data-module="contado">
+                <div class="card-icon">💰</div>
+                <div class="card-title">Eq. de Contado</div>
+            </div>
+
+            <div class="nav-card" data-module="credito_nuevo">
+                <div class="card-icon">💳</div>
+                <div class="card-title">Eq. a Crédito</div>
+            </div>
+
+            <div class="nav-card" data-module="accesorios">
+                <div class="card-icon">📱</div>
+                <div class="card-title">Accesorios</div>
+            </div>
+
+            <div class="nav-card" data-module="simexpress">
+                <div class="card-icon">📱</div>
+                <div class="card-title">Chips Express</div>
+            </div>
+
+            <div class="nav-card" data-module="existencias">
+                <div class="card-icon">🏆</div>
+                <div class="card-title">Top 15</div>
+            </div>
+            
+            <!-- MÓDULO: FACTURAS (PDF → CSV → EXCEL) - Solo visible para administrador -->
+            <div class="nav-card" data-module="facturas">
+                <div class="card-icon">📄</div>
+                <div class="card-title">Procesar Facturas</div>
+            </div>
+
+            <div class="nav-card" data-module="transferencias">
+                <div class="card-icon">🔄</div>
+                <div class="card-title">Transferencias Accesorios</div>
+            </div>
+            <div class="nav-card" data-module="inventario">
+                <div class="card-icon">📦</div>
+                <div class="card-title">Inventario Equipos</div>
+            </div>
+            <div class="nav-card" data-module="tae">
+                <div class="card-icon">📊</div>
+                <div class="card-title">TAE</div>
+            </div>
+
+            <div class="nav-card" data-module="ventasTotales">
+                <div class="card-icon">📈</div>
+                <div class="card-title">Ventas Totales</div>
+            </div>        
+
+            <div class="nav-card" data-module="servicios">
+                <div class="card-icon">💰</div>
+                <div class="card-title">Cobro de Servicios</div>
+            </div>
+
+            <!--<div class="nav-card" data-module="credito">
+                <div class="card-icon">📱</div>
+                <div class="card-title">PayJoy</div>
+            </div>-->
+            
+            <div class="nav-card" data-module="compras">
+                <div class="card-icon">🛒</div>
+                <div class="card-title">Compras</div>
+            </div>
+
+            <div class="nav-card" data-module="ingresos">
+                <div class="card-icon">💰</div>
+                <div class="card-title">Ingresos</div>
+            </div>
+        </div>
+
+        <!-- MÓDULO 1: CONTADO -->
+        <div id="contadoModule" class="module active-module">
+            <div class="card">
+                <div class="card-header"><h2>💰 Ventas de Contado</h2></div>
+                <div class="card-body">
+                    <div id="contadoErrorAlert" class="alert alert-error"></div>
+                    <div id="contadoInfoAlert" class="alert alert-info"></div>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label>📅 Fecha:</label>
+                            <input type="date" id="contadoDate">
+                        </div>
+                        <div class="query-button">
+                            <button id="btnAllLines" class="btn-contado">📱 Consultar</button>
+                        </div>
+                    </div>
+                    <div id="contadoStats" class="stats-clickable" style="display: none;"></div>
+                    <div id="contadoResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MÓDULO 2: CRÉDITO (NUEVO - sale_type=credit) -->
+        <div id="credito_nuevoModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>💳 Ventas a Crédito</h2></div>
+                <div class="card-body">
+                    <div id="creditoNuevoErrorAlert" class="alert alert-error"></div>
+                    <div id="creditoNuevoInfoAlert" class="alert alert-info"></div>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label>📅 Fecha:</label>
+                            <input type="date" id="creditoNuevoDate">
+                        </div>
+                        <div class="query-button">
+                            <button id="btnCreditoNuevo" class="btn-credito">💳 Consultar</button>
+                        </div>
+                    </div>
+                    <div id="creditoNuevoStats" class="stats-clickable" style="display: none;"></div>
+                    <div id="creditoNuevoResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MÓDULO: EXISTENCIAS (RANKING DE VENTAS) -->
+        <div id="existenciasModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>🏆 Modelos Más Vendidos</h2></div>
+                <div class="card-body">
+                    <div id="existenciasErrorAlert" class="alert alert-error"></div>
+                    <div id="existenciasInfoAlert" class="alert alert-info"></div>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label>📅 Fecha de consulta:</label>
+                            <input type="date" id="existenciasDate">
+                        </div>
+                        <div class="query-button">
+                            <button id="searchExistenciasBtn" class="btn-existencias">🏆 Generar Ranking</button>
+                        </div>
+                    </div>
+                    <div id="existenciasResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MÓDULO 3: CRÉDITO PAYJOY -->
+        <div id="creditoModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>💳 Ventas a Crédito - PayJoy</h2></div>
+                <div class="card-body">
+                    <div id="creditoErrorAlert" class="alert alert-error"></div>
+                    <div id="creditoInfoAlert" class="alert alert-info"></div>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label>📅 Fecha:</label>
+                            <input type="date" id="creditoDate">
+                        </div>
+                        <div class="query-button">
+                            <button id="searchCreditoBtn" class="btn-credito">🔍 Consultar</button>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 0;">
+                        <label>📄 Límite de páginas:</label>
+                        <select id="maxPagesSelect">
+                            <option value="0">Todas las páginas</option>
+                            <option value="1">1 página</option>
+                            <option value="5">5 páginas</option>
+                            <option value="10">10 páginas</option>
+                            <option value="20">20 páginas</option>
+                        </select>
+                    </div>
+                    <div id="creditoResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MÓDULO 4: ACCESORIOS -->
+        <div id="accesoriosModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>📱 Accesorios Vendidos</h2></div>
+                <div class="card-body">
+                    <div id="accesoriosErrorAlert" class="alert alert-error"></div>
+                    <div id="accesoriosInfoAlert" class="alert alert-info"></div>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label>📅 Fecha:</label>
+                            <input type="date" id="accesoriosDate">
+                        </div>
+                        <div class="query-button">
+                            <button id="searchAccesoriosBtn" class="btn-accesorios">🔍 Consultar</button>
+                        </div>
+                    </div>
+                    <div id="accesoriosResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+        <!-- MÓDULO: FACTURAS (PDF → CSV → EXCEL) -->
+        <div id="facturasModule" class="module">
+            <div class="card">
+                <div class="card-header">
+                    <h2>📄 Procesador de Facturas (PDF → CSV → Excel)</h2>
+                </div>
+                <div class="card-body">
+                    <div id="facturasErrorAlert" class="alert alert-error"></div>
+                    <div id="facturasInfoAlert" class="alert alert-info"></div>
+                    
+                    <!-- Tabs del módulo -->
+                    <div class="facturas-tabs" style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0;">
+                        <button class="facturas-tab active" data-tab="facturas-pdf-converter" style="background: transparent; border: none; padding: 10px 20px; font-weight: 600; cursor: pointer; color: #64748b; border-bottom: 3px solid transparent; transition: all 0.3s;">
+                            📄 Convertir PDF a CSV
+                        </button>
+                        <button class="facturas-tab" data-tab="facturas-csv-processor" style="background: transparent; border: none; padding: 10px 20px; font-weight: 600; cursor: pointer; color: #64748b; border-bottom: 3px solid transparent; transition: all 0.3s;">
+                            📊 Procesar CSV
+                        </button>
+                    </div>
+                    
+                    <!-- Convertidor PDF a CSV -->
+                    <div id="facturas-pdf-converter" class="facturas-tab-content active">
+                        <div class="file-upload-area" id="facturasPdfUploadArea" style="border: 2px dashed #3b82f6; border-radius: 16px; padding: 30px; text-align: center; margin-bottom: 20px; background: #f8fafc;">
+                            <p style="color: #64748b;">📄 Arrastra y suelta tu archivo PDF aquí o haz clic para seleccionar</p>
+                            <label for="facturasPdfFileInput" class="file-upload-label" style="display: inline-block; padding: 10px 24px; background: #3b82f6; color: white; border-radius: 50px; cursor: pointer; font-weight: 600;">
+                                Seleccionar Archivo PDF
+                            </label>
+                            <input type="file" id="facturasPdfFileInput" accept=".pdf" style="display: none;">
+                            <div id="facturasPdfFileName" class="file-name" style="margin-top: 10px; color: #1e40af; font-weight: 500;"></div>
+                        </div>
+                        
+                        <button id="facturasConvertBtn" class="btn-tae" disabled style="width: 100%; padding: 12px; margin-bottom: 10px;">🔄 Convertir a CSV</button>
+                        <div id="facturasPdfLoader" style="display: none; text-align: center; padding: 10px;">
+                            <div class="loading-spinner" style="display: inline-block; width: 30px; height: 30px;"></div>
+                            <p style="color: #64748b; margin-top: 8px;">⏳ Convirtiendo PDF, por favor espera...</p>
+                        </div>
+                        <div id="facturasPdfError" style="color: #dc2626; margin: 10px 0; text-align: center;"></div>
+                        <a id="facturasDownloadLink" class="btn btn-success hidden" style="display: block; margin: 10px auto; text-align: center; background: #059669; color: white; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 600;">📥 Descargar CSV</a>
+                        <button id="facturasContinueToProcessorBtn" class="btn btn-secondary hidden" style="display: block; margin: 10px auto;">➡️ Continuar al Procesador CSV</button>
+                    </div>
+                    
+                    <!-- Procesador CSV -->
+                    <div id="facturas-csv-processor" class="facturas-tab-content" style="display: none;">
+                        <div class="file-upload-area" id="facturasCsvUploadArea" style="border: 2px dashed #3b82f6; border-radius: 16px; padding: 30px; text-align: center; margin-bottom: 20px; background: #f8fafc;">
+                            <p style="color: #64748b;">📊 Arrastra y suelta tu archivo CSV aquí o haz clic para seleccionar</p>
+                            <label for="facturasCsvFileInput" class="file-upload-label" style="display: inline-block; padding: 10px 24px; background: #3b82f6; color: white; border-radius: 50px; cursor: pointer; font-weight: 600;">
+                                Seleccionar Archivo CSV
+                            </label>
+                            <input type="file" id="facturasCsvFileInput" accept=".csv" style="display: none;">
+                            <div id="facturasCsvFileName" class="file-name" style="margin-top: 10px; color: #1e40af; font-weight: 500;"></div>
+                        </div>
+                        
+                        <div id="facturasCsvControls" class="hidden" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+                            <button id="facturasSelectAllButton" class="btn-contado" style="padding: 8px 16px;">☑️ Seleccionar/Deseleccionar Todas</button>
+                            <button id="facturasContinueButton" class="btn-contado" disabled style="padding: 8px 16px;">➡️ Continuar</button>
+                            <button id="facturasResetButton" class="btn btn-danger" style="padding: 8px 16px; background: #dc2626; color: white; border: none; border-radius: 10px; cursor: pointer;">🔄 Reiniciar</button>
+                        </div>
+                        
+                        <div id="facturasCsvTableContainer">
+                            <div class="table-container">
+                                <table class="facturas-csv-table" style="width: 100%; border-collapse: collapse; font-size: 0.75rem;">
+                                    <thead style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white;">
+                                        <tr>
+                                            <th style="padding: 10px; width: 50px;">✅</th>
+                                            <th style="padding: 10px;">Datos</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="facturasCsvTableBody"></tbody>
+                                </table>
+                            </div>
+                            <button id="facturasContinueButtonBottom" class="btn-contado hidden" style="width: 100%; padding: 12px; margin-top: 10px;">➡️ Continuar</button>
+                        </div>
+                        
+                        <div id="facturasProcessedSection" style="display: none;">
+                            <div class="search-container" style="display: flex; gap: 10px; margin: 20px 0;">
+                                <input type="text" id="facturasSearchInput" placeholder="🔍 Buscar por descripción o número de serie..." style="flex: 1; padding: 10px 16px; border: 2px solid #bfdbfe; border-radius: 10px; font-size: 0.9rem;">
+                            </div>
+                            
+                            <!--<div class="file-upload-area" id="facturasExcelUploadArea" style="border: 2px dashed #3b82f6; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 20px; background: #f8fafc;">
+                                <p style="color: #64748b;">📊 Arrastra y suelta tu archivo Excel con códigos de barras aquí o haz clic para seleccionar</p>
+                                <label for="facturasExcelFileInput" class="file-upload-label" style="display: inline-block; padding: 8px 20px; background: #10b981; color: white; border-radius: 50px; cursor: pointer; font-weight: 600;">
+                                    Seleccionar Archivo Excel
+                                </label>
+                                <input type="file" id="facturasExcelFileInput" accept=".xlsx,.xls" style="display: none;">
+                                <div id="facturasExcelFileName" class="file-name" style="margin-top: 10px; color: #1e40af; font-weight: 500;"></div>
+                            </div>-->
+                            
+                            <div id="facturasProcessedControls" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+                                <button id="facturasCheckBarcodesButton" class="btn-contado" disabled style="padding: 8px 16px;">🔍 Revisar Códigos de Barras</button>
+                                <button id="facturasExportExcelButton" class="btn btn-success hidden" style="padding: 8px 16px; background: #059669; color: white; border: none; border-radius: 10px; cursor: pointer;">📊 Exportar a Excel</button>
+                                <button id="facturasBackButton" class="btn btn-secondary" style="padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 10px; cursor: pointer;">⬅️ Regresar</button>
+                                <button id="facturasSummaryButton" class="btn-tae" style="padding: 8px 16px;">📊 Ver Resumen</button>
+                                <button id="facturasSearchCatalogBtn" class="btn-tae" style="padding: 8px 16px; background: #7c3aed; color: white; border: none; border-radius: 10px; cursor: pointer;">🔍 Buscar en Catálogo</button>
+                                <button id="facturasClearStorageButton" class="btn btn-danger" style="padding: 8px 16px; background: #dc2626; color: white; border: none; border-radius: 10px; cursor: pointer;">🗑️ Borrar Datos</button>
+                            </div>
+                            
+                            <div class="table-container">
+                                <table id="facturasDataTable" style="width: 100%; border-collapse: collapse; font-size: 0.75rem;">
+                                    <thead style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white;">
+                                        <tr>
+                                            <th style="padding: 10px;">Clave</th>
+                                            <th style="padding: 10px; min-width: 200px;">Descripción</th>
+                                            <th style="padding: 10px; text-align: center;">Cantidad</th>
+                                            <th style="padding: 10px; text-align: right;">Costo</th>
+                                            <th style="padding: 10px; text-align: right;">Descuento</th>
+                                            <th style="padding: 10px; text-align: right;">Importe</th>
+                                            <th style="padding: 10px; min-width: 150px;">Números de Serie</th>
+                                            <th style="padding: 10px; text-align: center;">Código de Barras</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="facturasDataTableBody"></tbody>
+                                </table>
+                            </div>
+                            <button id="facturasExportExcelButtonBottom" class="btn btn-success hidden" style="width: 100%; padding: 12px; margin-top: 10px; background: #059669; color: white; border: none; border-radius: 10px; cursor: pointer;">📊 Exportar a Excel</button>
+                            <button id="facturasBackToTopButton" class="btn btn-secondary" style="display: block; margin: 20px auto; padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 10px; cursor: pointer;">⬆️ Regresar al inicio</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL DE RESUMEN - FACTURAS -->
+        <div id="facturasSummaryModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3>📊 Resumen de Factura</h3>
+                    <span class="close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="summary-item" style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0;">
+                        <strong style="color: #1e40af;">📱 EQUIPOS:</strong>
+                        <p>Cantidad: <span id="facturasEquiposTotal">0 Pzas.</span></p>
+                        <p>Importe Total: <span id="facturasEquiposImporteTotal">$0,000.00</span></p>
+                        <p>Descuento Total: <span id="facturasEquiposDescuentoTotal">$0,000.00</span></p>
+                    </div>
+                    <div class="summary-item" style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0;">
+                        <strong style="color: #059669;">📱 SIMCARDS:</strong>
+                        <p>Cantidad: <span id="facturasSimcardsTotal">0 Pzas.</span></p>
+                        <p>Importe Total: <span id="facturasSimcardsImporteTotal">$0,000.00</span></p>
+                        <p>Descuento Total: <span id="facturasSimcardsDescuentoTotal">$0,000.00</span></p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="facturasClosePopupButton" style="padding: 8px 20px; background: #3b82f6; color: white; border: none; border-radius: 10px; cursor: pointer;">Cerrar</button>
+                </div>
+            </div>
+        </div>
+
+            <!-- MODAL DE DESCRIPCIONES NO ENCONTRADAS - FACTURAS -->
+            <div id="facturasMissingDescriptionsModal" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h3>📝 Descripciones sin Código de Barras</h3>
+                        <span class="close-modal" id="facturasMissingCloseX">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div id="facturasMissingDescriptionsModalContent"></div>
+                    </div>
+                    <div class="modal-footer" style="text-align: center; padding: 12px 20px;">
+                        <!-- SOLO UN BOTÓN DE CERRAR EN EL FOOTER -->
+                        <button id="facturasCloseMissingModalBtn" style="padding: 8px 20px; background: #64748b; color: white; border: none; border-radius: 10px; cursor: pointer;">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        <!-- MÓDULO 5: TAE -->
+        <div id="taeModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>📊 Ventas TAE</h2></div>
+                <div class="card-body">
+                    <div id="taeErrorAlert" class="alert alert-error"></div>
+                    <div id="taeInfoAlert" class="alert alert-info"></div>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label>📅 Fecha:</label>
+                            <input type="date" id="taeDate">
+                        </div>
+                        <div class="query-button">
+                            <button id="searchTaeBtn" class="btn-tae">🔍 Consultar</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+                            <input type="checkbox" id="verSemanaTaeCheckbox" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span style="color: #1e40af; font-weight: 500;">📅 Ver última semana (7 días)</span>
+                        </label>
+                        <span style="font-size: 12px; color: #64748b;">💡 Desmarca para ver solo el día seleccionado</span>
+                    </div>
+                    <div id="taeResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MÓDULO: SIM EXPRESS -->
+        <div id="simexpressModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>📱 SIMCARDS - Ventas</h2></div>
+                <div class="card-body">
+                    <div id="simexpressErrorAlert" class="alert alert-error"></div>
+                    <div id="simexpressInfoAlert" class="alert alert-info"></div>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label>📅 Fecha:</label>
+                            <input type="date" id="simexpressDate">
+                        </div>
+                        <div class="query-button">
+                            <button id="searchSimExpressBtn" class="btn-accesorios">📱 Consultar</button>
+                        </div>
+                    </div>
+                    <div id="simexpressStats" class="stats-clickable" style="display: none;"></div>
+                    <div id="simexpressResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MÓDULO: INVENTARIO POR MODELO -->
+        <div id="inventarioModule" class="module">
+            <div class="card">
+                <div class="card-header">
+                    <h2>📦 Inventario por Modelo</h2>
+                </div>
+                <div class="card-body">
+                    <div id="inventarioErrorAlert" class="alert alert-error"></div>
+                    <div id="inventarioInfoAlert" class="alert alert-info"></div>
+                    
+                    <div class="form-group">
+                        <label>🔍 Buscar modelo (líneas 4 y 5):</label>
+                        <input type="text" id="productoSearchInput" placeholder="Escribe al menos 3 caracteres..." autocomplete="off" style="width: 100%;">
+                        <div id="suggestionsContainer" style="position: relative; width: 100%;"></div>
+                        <small style="color: #64748b; font-size: 0.7rem;">💡 Escribe al menos 3 caracteres - Se buscará automáticamente</small>
+                    </div>
+                    
+                    <div id="selectedProductInfo" style="display: none; margin-top: 15px; padding: 12px; background: #f0f9ff; border-radius: 10px; border-left: 4px solid #f97316;">
+                        <strong>📱 Producto seleccionado:</strong> <span id="selectedProductName"></span>
+                        <button id="clearProductBtn" style="margin-left: 10px; padding: 4px 10px; font-size: 0.7rem; background: #dc2626; border: none; border-radius: 6px; color: white; cursor: pointer;">✖ Limpiar</button>
+                    </div>
+                    
+                    <button id="searchInventarioBtn" class="btn-existencias" style="margin-top: 20px; width: 100%; padding: 12px;" disabled>🔍 Consultar Inventario</button>
+                    
+                    <div id="inventarioResults" style="display: none; margin-top: 20px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MÓDULO: VENTAS TOTALES -->
+        <div id="ventasTotalesModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>📈 Ventas Totales</h2></div>
+                <div class="card-body">
+                    <div id="ventasTotalesErrorAlert" class="alert alert-error"></div>
+                    <div id="ventasTotalesInfoAlert" class="alert alert-info"></div>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label>📅 Fecha de referencia:</label>
+                            <input type="date" id="ventasTotalesEndDate">
+                        </div>
+                        <div class="query-button">
+                            <button id="searchVentasTotalesBtn" class="btn-ventas-totales">📊 Consultar</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+                            <input type="checkbox" id="verSemanaCheckbox" checked style="width: 18px; height: 18px; cursor: pointer;">
+                            <span style="color: #1e40af; font-weight: 500;">📅 Ver última semana (7 días)</span>
+                        </label>
+                        <span style="font-size: 12px; color: #64748b;">💡 Desmarca para ver solo el día seleccionado</span>
+                    </div>
+                    <div id="ventasTotalesResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MÓDULO 6: TRANSFERENCIAS Y VENTAS -->
+        <div id="transferenciasModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>🔄 Transferencias y Ventas Accesorios</h2></div>
+                <div class="card-body">
+                    <div id="transferenciasErrorAlert" class="alert alert-error"></div>
+                    <div id="transferenciasInfoAlert" class="alert alert-info"></div>
+                    
+                    <div class="transfer-filters-grid">
+                        <div class="transfer-filter-group">
+                            <label>📅 FECHA INICIO</label>
+                            <input type="date" id="startDateTransfer">
+                        </div>
+                        
+                        <div class="transfer-filter-group">
+                            <label>📅 FECHA FIN</label>
+                            <input type="date" id="endDateTransfer">
+                        </div>
+                        
+                        <div class="transfer-filter-group">
+                            <label>🏢 SUCURSAL DESTINO</label>
+                            <select id="branchDestinySelect">
+                                <option value="">Seleccionar</option>
+                            </select>
+                        </div>
+                        
+                        <div class="transfer-filter-group">
+                            <label>🏭 ALMACÉN DESTINO</label>
+                            <select id="warehouseDestinySelect" disabled>
+                                <option value="">Primero seleccione sucursal</option>
+                            </select>
+                        </div>
+                        
+                        <div class="transfer-filter-group">
+                            <label>📦 ACCESORIO</label>
+                            <select id="productSelect">
+                                <option value="">Todos los accesorios</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button id="searchTransferBtn" class="btn-transfer transfer-query-btn">🔍 CONSULTAR</button>
+                    
+                    <div id="inventoryContainer" class="transfer-inventory-bar" style="display: none;">
+                        <div class="transfer-inventory-item">
+                            <span class="transfer-inventory-icon">📊</span>
+                            <div>
+                                <div class="transfer-inventory-label">Inventario Inicial</div>
+                                <span id="initialInventoryValue" class="transfer-inventory-value">-</span>
+                                <span id="initialInventoryDate" class="transfer-inventory-date"></span>
+                            </div>
+                        </div>
+                        <div class="transfer-inventory-item">
+                            <span class="transfer-inventory-icon">🏁</span>
+                            <div>
+                                <div class="transfer-inventory-label">Inventario Final</div>
+                                <span id="finalInventoryValue" class="transfer-inventory-value">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="transfer-tabs-container">
+                        <button class="transfer-tab-button active" data-tab="transfers">📦 Transferencias</button>
+                        <button class="transfer-tab-button" data-tab="sales">💰 Ventas</button>
+                    </div>
+                    
+                    <div id="transfersTab" class="tab-content active-tab" style="display: none;">
+                        <div class="table-container">
+                            <table class="transfer-table">
+                                <thead>
+                                    <tr>
+                                        <th># Transferencia</th>
+                                        <th>Fecha</th>
+                                        <th>Almacén Origen</th>
+                                        <th>Almacén Destino</th>
+                                        <th>Asesor</th>
+                                        <th>Cantidad</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="transferTableBody">
+                                    <tr><td colspan="7" style="text-align: center;">-- Seleccione filtros y consulte --</div></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div id="salesTab" class="tab-content" style="display: none;">
+                        <div class="table-container">
+                            <table class="transfer-table">
+                                <thead>
+                                    <tr>
+                                        <th># Venta</th>
+                                        <th>Fecha</th>
+                                        <th>Producto</th>
+                                        <th>Cantidad</th>
+                                        <th>Precio Unitario</th>
+                                        <th>Total</th>
+                                        <th>Vendedor</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="salesTableBody">
+                                    <tr><td colspan="7" style="text-align: center;">-- Seleccione filtros y consulte --</div></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MÓDULO 7: COBRO DE SERVICIOS -->
+        <div id="serviciosModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>💰 Cobro de Servicios</h2></div>
+                <div class="card-body">
+                    <div id="serviciosErrorAlert" class="alert alert-error"></div>
+                    <div id="serviciosInfoAlert" class="alert alert-info"></div>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label>📅 Fecha:</label>
+                            <input type="date" id="serviciosDate">
+                        </div>
+                        <div class="query-button">
+                            <button id="searchServiciosBtn" class="btn-servicios">🔍 Consultar</button>
+                        </div>
+                    </div>
+                    <div id="serviciosResults" style="display: none;">
+                        <div class="stats">
+                            <div class="stat-card"><div class="stat-number" id="serviciosTotalTransacciones">0</div><div class="stat-label">Total Transacciones</div></div>
+                            <div class="stat-card"><div class="stat-number" id="serviciosTotalMonto">$0</div><div class="stat-label">Total Cobrado</div></div>
+                            <div class="stat-card"><div class="stat-number" id="serviciosTotalComisiones">$0</div><div class="stat-label">Total Comisiones</div></div>
+                            <div class="stat-card"><div class="stat-number" id="serviciosTotalNeto">$0</div><div class="stat-label">Neto</div></div>
+                        </div>
+                        <div class="table-container">
+                            <table class="servicios-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Plataforma / Servicio</th>
+                                        <th>Cantidad</th>
+                                        <th>Monto Cobrado</th>
+                                        <th>Comisiones</th>
+                                        <th>Neto</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="serviciosTableBody">
+                                    <tr><td colspan="6" style="text-align: center;">-- Seleccione una fecha y consulte --</div></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MÓDULO 8: INGRESOS -->
+        <div id="ingresosModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>💰 Ingresos por Sucursal</h2></div>
+                <div class="card-body">
+                    <div id="ingresosErrorAlert" class="alert alert-error"></div>
+                    <div id="ingresosInfoAlert" class="alert alert-info"></div>
+                    
+                    <div class="ingresos-filters-grid">
+                        <div class="ingresos-filter-group">
+                            <label>📅 FECHA INICIO</label>
+                            <input type="date" id="ingresosStartDate">
+                        </div>
+                        
+                        <div class="ingresos-filter-group">
+                            <label>📅 FECHA FIN</label>
+                            <input type="date" id="ingresosEndDate">
+                        </div>
+                        
+                        <div class="ingresos-filter-group">
+                            <label>🏢 SUCURSAL</label>
+                            <select id="ingresosBranchSelect">
+                                <option value="">Cargando sucursales...</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button id="searchIngresosBtn" class="btn-ingresos ingresos-query-btn">🔍 CONSULTAR</button>
+                    
+                    <div id="ingresosStats" class="stats-clickable" style="display: none;"></div>
+                    <div id="ingresosResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+        <!-- MÓDULO 9: COMPRAS POR PRODUCTO -->
+        <div id="comprasModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>🛒 Compras por Producto</h2></div>
+                <div class="card-body">
+                    <div id="comprasErrorAlert" class="alert alert-error"></div>
+                    <div id="comprasInfoAlert" class="alert alert-info"></div>
+                    
+                    <!-- Filtros -->
+                    <div class="compras-filters-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; background: #f8fafc; padding: 20px; border-radius: 16px;">
+                        <div class="compras-filter-group">
+                            <label>📅 FECHA INICIO</label>
+                            <input type="date" id="comprasStartDate">
+                        </div>
+                        
+                        <div class="compras-filter-group">
+                            <label>📅 FECHA FIN</label>
+                            <input type="date" id="comprasEndDate">
+                        </div>
+                        
+                        <div class="compras-filter-group">
+                            <label>🏢 PROVEEDOR</label>
+                            <select id="proveedorSelect">
+                                <option value="">Todos los proveedores</option>
+                            </select>
+                        </div>
+                        
+                    </div>
+                    
+                    <button id="searchComprasBtn" class="btn-compras" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); width: 100%; padding: 12px; margin-bottom: 20px;">🔍 CONSULTAR COMPRAS</button>
+                    
+                    <!-- Estadísticas -->
+                    <div id="comprasStats" class="stats-clickable" style="display: none; margin-bottom: 20px;"></div>
+                    
+                    <!-- Resultados -->
+                    <div id="comprasResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+        <!-- MODAL PARA GRÁFICAS EXPANDIDAS -->
+        <div id="chartModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 900px;">
+                <div class="modal-header">
+                    <h3 id="chartModalTitle">📊 Gráfica</h3>
+                    <span class="close-modal" onclick="closeChartModal()">&times;</span>
+                </div>
+                <div class="modal-body" id="chartModalBody" style="max-height: 70vh; overflow-y: auto;">
+                    <canvas id="modalChart" style="max-height: 500px; width: 100%;"></canvas>
+                </div>
+                <div class="modal-footer">
+                    <button onclick="closeChartModal()" style="padding: 6px 16px; cursor: pointer;">Cerrar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <footer class="footer">
+            <p>© Copyright - SADECO 2026</p>
+        </footer>
+    </div>
+    <!-- FIN DEL CONTAINER -->
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/modules/contado.js"></script>
+    <script src="js/modules/credito_nuevo.js"></script>
+    <script src="js/modules/existencias.js"></script>
+    <script src="js/modules/credito.js"></script>
+    <script src="js/modules/accesorios.js"></script>
+    <script src="js/modules/tae.js"></script>
+    <script src="js/modules/ventas_totales.js"></script>
+    <script src="js/modules/transferencias.js"></script>
+    <script src="js/modules/inventario.js"></script>
+    <script src="js/modules/servicios.js"></script>
+    <script src="js/modules/ingresos.js"></script>
+    <script src="js/modules/simexpress.js"></script>
+    <script src="js/modules/compras.js"></script>
+    <script src="js/modules/facturas.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
