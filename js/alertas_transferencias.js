@@ -1,4 +1,4 @@
-// ==================== ALERTA DE TRANSFERENCIAS PENDIENTES (MODAL CON RUTAS) ====================
+// ==================== ALERTA DE TRANSFERENCIAS PENDIENTES (MODAL CON PESTAÑAS POR ALMACÉN) ====================
 
 // Variable para evitar múltiples ejecuciones automáticas
 let alertaTransferenciasCargada = false;
@@ -11,7 +11,7 @@ async function verificarTransferenciasPendientes(forzar = false) {
     // Si se fuerza o no hay datos en caché, consultar nuevamente
     if (!forzar && alertaTransferenciasCargada && cachedTransferenciasData) {
         console.log('📦 Mostrando datos en caché...');
-        mostrarModalTransferencias(cachedTransferenciasData.tiendas, cachedTransferenciasData.total);
+        mostrarModalTransferencias(cachedTransferenciasData);
         return;
     }
 
@@ -53,7 +53,6 @@ async function verificarTransferenciasPendientes(forzar = false) {
 
         if (allTransfers.length === 0) {
             console.log('✅ No hay transferencias pendientes');
-            // Mostrar mensaje de que no hay transferencias
             mostrarSinTransferencias();
             return;
         }
@@ -76,10 +75,26 @@ async function verificarTransferenciasPendientes(forzar = false) {
             return null;
         }
 
-        // Agrupar por tienda destino con sus transferencias
-        const tiendasMap = new Map();
+        // Clasificar por almacén origen
+        const almacenesMap = new Map();
 
         allTransfers.forEach(transfer => {
+            // Obtener nombre del almacén origen
+            let almacenOrigen = 'Otros';
+            if (transfer.origin_warehouse?.name) {
+                const nombreAlmacen = transfer.origin_warehouse.name.toLowerCase();
+                if (nombreAlmacen.includes('tae')) {
+                    almacenOrigen = 'TAE';
+                } else if (nombreAlmacen.includes('equipos matriz') || nombreAlmacen.includes('equipos matrix')) {
+                    almacenOrigen = 'Equipos Matriz';
+                } else if (nombreAlmacen.includes('accesorios matriz') || nombreAlmacen.includes('accesorios matrix')) {
+                    almacenOrigen = 'Accesorios Matriz';
+                } else {
+                    almacenOrigen = 'Otros';
+                }
+            }
+
+            // Obtener tienda destino
             let tiendaNombre = 'Sin tienda asignada';
             if (transfer.target_warehouse?.branch?.name) {
                 tiendaNombre = transfer.target_warehouse.branch.name;
@@ -87,15 +102,17 @@ async function verificarTransferenciasPendientes(forzar = false) {
                 tiendaNombre = transfer.target_warehouse.name;
             }
 
-            // Obtener almacén origen (warehouse)
-            let origenNombre = 'No disponible';
-            if (transfer.origin_warehouse?.name) {
-                origenNombre = transfer.origin_warehouse.name;
-            }
-
             // Obtener fecha
             const fecha = transfer.dispatched_at ? formatDateOnly(transfer.dispatched_at) : 'No disponible';
 
+            // Clave compuesta: almacen_origen|tienda
+            const key = `${almacenOrigen}|${tiendaNombre}`;
+
+            if (!almacenesMap.has(almacenOrigen)) {
+                almacenesMap.set(almacenOrigen, new Map());
+            }
+
+            const tiendasMap = almacenesMap.get(almacenOrigen);
             if (!tiendasMap.has(tiendaNombre)) {
                 tiendasMap.set(tiendaNombre, {
                     tienda: tiendaNombre,
@@ -109,42 +126,50 @@ async function verificarTransferenciasPendientes(forzar = false) {
             tienda.cantidad++;
             tienda.transferencias.push({
                 id: transfer.id,
-                origen: origenNombre,
+                origen: transfer.origin_warehouse?.name || 'No disponible',
                 fecha: fecha,
                 status: transfer.status || 'En tránsito'
             });
         });
 
-        // Convertir a array y ordenar por ruta (primero Ruta 1, Ruta 2, etc.)
-        const ordenRutas = ["Ruta 1", "Ruta 2", "Ruta 3", "Ruta 4"];
-
-        const tiendas = Array.from(tiendasMap.values())
-            .sort((a, b) => {
-                const rutaA = a.ruta ? a.ruta.nombre : "Sin Ruta";
-                const rutaB = b.ruta ? b.ruta.nombre : "Sin Ruta";
-                
-                // Primero ordenar por ruta (Ruta 1, Ruta 2, Ruta 3, Ruta 4, Sin Ruta)
-                const indexA = ordenRutas.indexOf(rutaA);
-                const indexB = ordenRutas.indexOf(rutaB);
-                
-                // Si ambas tienen ruta definida, comparar por índice
-                if (indexA !== -1 && indexB !== -1) {
-                    return indexA - indexB;
-                }
-                // Si una tiene ruta y la otra no, la que tiene ruta va primero
-                if (indexA !== -1 && indexB === -1) return -1;
-                if (indexA === -1 && indexB !== -1) return 1;
-                // Si ninguna tiene ruta, ordenar alfabéticamente
-                return a.tienda.localeCompare(b.tienda);
-            });
-        // Guardar en caché
-        cachedTransferenciasData = {
-            tiendas: tiendas,
-            total: allTransfers.length
+        // Construir estructura final
+        const resultado = {
+            total: allTransfers.length,
+            almacenes: {}
         };
 
+        // Orden de almacenes
+        const ordenAlmacenes = ['TAE', 'Equipos Matriz', 'Accesorios Matriz', 'Otros'];
+
+        for (const almacen of ordenAlmacenes) {
+            if (almacenesMap.has(almacen)) {
+                const tiendasMap = almacenesMap.get(almacen);
+                const tiendas = Array.from(tiendasMap.values())
+                    .sort((a, b) => {
+                        const rutaA = a.ruta ? a.ruta.nombre : "Sin Ruta";
+                        const rutaB = b.ruta ? b.ruta.nombre : "Sin Ruta";
+                        const ordenRutas = ["Ruta 1", "Ruta 2", "Ruta 3", "Ruta 4"];
+                        const indexA = ordenRutas.indexOf(rutaA);
+                        const indexB = ordenRutas.indexOf(rutaB);
+                        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                        if (indexA !== -1 && indexB === -1) return -1;
+                        if (indexA === -1 && indexB !== -1) return 1;
+                        return a.tienda.localeCompare(b.tienda);
+                    });
+                
+                resultado.almacenes[almacen] = {
+                    tiendas: tiendas,
+                    totalTiendas: tiendas.length,
+                    totalTransferencias: tiendas.reduce((sum, t) => sum + t.cantidad, 0)
+                };
+            }
+        }
+
+        // Guardar en caché
+        cachedTransferenciasData = resultado;
+
         // Mostrar el modal
-        mostrarModalTransferencias(tiendas, allTransfers.length);
+        mostrarModalTransferencias(resultado);
 
         alertaTransferenciasCargada = true;
 
@@ -153,66 +178,9 @@ async function verificarTransferenciasPendientes(forzar = false) {
     }
 }
 
-// ==================== MOSTRAR MENSAJE SIN TRANSFERENCIAS ====================
+// ==================== MOSTRAR MODAL CON PESTAÑAS ====================
 
-function mostrarSinTransferencias() {
-    const modal = document.createElement('div');
-    modal.id = 'modalTransferenciasPendientes';
-    modal.className = 'modal';
-    modal.style.cssText = `
-        display: flex !important;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-    `;
-
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 450px; animation: modalFadeIn 0.3s ease-out;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
-                <h3 style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 1.8rem;">✅</span>
-                    <span>Sin Transferencias Pendientes</span>
-                </h3>
-                <span class="close-modal" onclick="cerrarModalTransferencias()" style="font-size: 32px; cursor: pointer;">&times;</span>
-            </div>
-            <div class="modal-body" style="padding: 30px; text-align: center;">
-                <div style="font-size: 4rem; margin-bottom: 16px;">📦</div>
-                <div style="font-size: 1.2rem; font-weight: 600; color: #1e293b; margin-bottom: 8px;">
-                    No hay transferencias en tránsito
-                </div>
-                <div style="color: #64748b; font-size: 0.9rem;">
-                    Todas las transferencias han sido recibidas correctamente.
-                </div>
-            </div>
-            <div class="modal-footer" style="display: flex; justify-content: center;">
-                <button onclick="cerrarModalTransferencias()" style="
-                    background: #059669;
-                    color: white;
-                    border: none;
-                    padding: 8px 30px;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-weight: 600;
-                ">
-                    Entendido
-                </button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // Cerrar al hacer clic fuera
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            cerrarModalTransferencias();
-        }
-    });
-}
-
-// ==================== MOSTRAR MODAL ====================
-
-function mostrarModalTransferencias(tiendas, totalTransferencias) {
+function mostrarModalTransferencias(data) {
     // Verificar si ya existe el modal para no duplicar
     const modalExistente = document.getElementById('modalTransferenciasPendientes');
     if (modalExistente) {
@@ -230,147 +198,243 @@ function mostrarModalTransferencias(tiendas, totalTransferencias) {
         z-index: 9999;
     `;
 
-    // Generar HTML de tiendas agrupadas por ruta
-    let tiendasHtml = '';
-    
-    // Agrupar tiendas por ruta
-    const tiendasPorRuta = {};
-    const tiendasSinRuta = [];
+    // Generar pestañas
+    const ordenAlmacenes = ['TAE', 'Equipos Matriz', 'Accesorios Matriz', 'Otros'];
+    let tabsHtml = '';
+    let contentHtml = '';
 
-    tiendas.forEach(tienda => {
-        if (tienda.ruta) {
-            if (!tiendasPorRuta[tienda.ruta.nombre]) {
-                tiendasPorRuta[tienda.ruta.nombre] = {
-                    color: tienda.ruta.color,
-                    tiendas: []
-                };
-            }
-            tiendasPorRuta[tienda.ruta.nombre].tiendas.push(tienda);
-        } else {
-            tiendasSinRuta.push(tienda);
-        }
-    });
+    // Iconos por almacén
+    const iconosAlmacenes = {
+        'TAE': '📱',
+        'Equipos Matriz': '📱',
+        'Accesorios Matriz': '🔌',
+        'Otros': '📦'
+    };
 
-    // Generar HTML por ruta
-    for (const [rutaNombre, rutaData] of Object.entries(tiendasPorRuta)) {
-        tiendasHtml += `
-            <div style="margin-bottom: 12px;">
-                <div style="font-size: 0.8rem; font-weight: 600; color: ${rutaData.color}; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                    <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: ${rutaData.color};"></span>
-                    ${rutaNombre}
-                </div>
-                <div style="display: flex; flex-wrap: wrap; gap: 8px; padding-left: 20px;">
-                    ${rutaData.tiendas.map(tienda => `
-                        <div class="tienda-pendiente" 
-                             data-tienda="${escapeHtml(tienda.tienda)}"
-                             data-transferencias='${JSON.stringify(tienda.transferencias).replace(/'/g, "&#39;")}'
-                             style="
-                                background: ${rutaData.color}15;
-                                border: 1px solid ${rutaData.color}40;
-                                border-radius: 8px;
-                                padding: 8px 14px;
-                                display: flex;
-                                align-items: center;
-                                gap: 10px;
-                                cursor: pointer;
-                                transition: all 0.2s;
-                                flex: 0 1 auto;
-                            "
-                            onmouseover="this.style.transform='scale(1.03)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';"
-                            onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
-                            <span style="font-size: 1rem;">🏪</span>
-                            <span style="font-weight: 500; color: #1e293b; font-size: 0.85rem;">${escapeHtml(tienda.tienda)}</span>
-                            <span style="
-                                background: ${rutaData.color};
-                                color: white;
-                                border-radius: 50%;
-                                padding: 1px 9px;
-                                font-size: 0.75rem;
-                                font-weight: 700;
-                                min-width: 22px;
-                                text-align: center;
-                            ">${tienda.cantidad}</span>
+    // Colores por almacén
+    const coloresAlmacenes = {
+        'TAE': '#8b5cf6',
+        'Equipos Matriz': '#3b82f6',
+        'Accesorios Matriz': '#f97316',
+        'Otros': '#64748b'
+    };
+
+    let primeraPestana = true;
+    let tabsHtmlGenerado = '';
+    let contentHtmlGenerado = '';
+
+    for (const almacen of ordenAlmacenes) {
+        if (data.almacenes[almacen]) {
+            const almacenData = data.almacenes[almacen];
+            const activeClass = primeraPestana ? 'active' : '';
+            const displayStyle = primeraPestana ? 'block' : 'none';
+            const color = coloresAlmacenes[almacen] || '#64748b';
+            const icono = iconosAlmacenes[almacen] || '📦';
+
+            // Generar HTML de tiendas para este almacén
+            let tiendasHtml = '';
+            
+            // Agrupar tiendas por ruta dentro de este almacén
+            const tiendasPorRuta = {};
+            const tiendasSinRuta = [];
+
+            almacenData.tiendas.forEach(tienda => {
+                if (tienda.ruta) {
+                    if (!tiendasPorRuta[tienda.ruta.nombre]) {
+                        tiendasPorRuta[tienda.ruta.nombre] = {
+                            color: tienda.ruta.color,
+                            tiendas: []
+                        };
+                    }
+                    tiendasPorRuta[tienda.ruta.nombre].tiendas.push(tienda);
+                } else {
+                    tiendasSinRuta.push(tienda);
+                }
+            });
+
+            // Generar HTML por ruta
+            for (const [rutaNombre, rutaData] of Object.entries(tiendasPorRuta)) {
+                tiendasHtml += `
+                    <div style="margin-bottom: 10px;">
+                        <div style="font-size: 0.75rem; font-weight: 600; color: ${rutaData.color}; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${rutaData.color};"></span>
+                            ${rutaNombre}
                         </div>
-                    `).join('')}
+                        <div style="display: flex; flex-wrap: wrap; gap: 6px; padding-left: 16px;">
+                            ${rutaData.tiendas.map(tienda => `
+                                <div class="tienda-pendiente" 
+                                     data-tienda="${escapeHtml(tienda.tienda)}"
+                                     data-transferencias='${JSON.stringify(tienda.transferencias).replace(/'/g, "&#39;")}'
+                                     style="
+                                        background: ${rutaData.color}12;
+                                        border: 1px solid ${rutaData.color}30;
+                                        border-radius: 6px;
+                                        padding: 6px 12px;
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 8px;
+                                        cursor: pointer;
+                                        transition: all 0.2s;
+                                        flex: 0 1 auto;
+                                        font-size: 0.8rem;
+                                    "
+                                    onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)';"
+                                    onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
+                                    <span style="font-size: 0.9rem;">🏪</span>
+                                    <span style="font-weight: 500; color: #1e293b;">${escapeHtml(tienda.tienda)}</span>
+                                    <span style="
+                                        background: ${rutaData.color};
+                                        color: white;
+                                        border-radius: 50%;
+                                        padding: 0 8px;
+                                        font-size: 0.7rem;
+                                        font-weight: 700;
+                                        min-width: 20px;
+                                        text-align: center;
+                                    ">${tienda.cantidad}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Tiendas sin ruta
+            if (tiendasSinRuta.length > 0) {
+                tiendasHtml += `
+                    <div style="margin-bottom: 10px;">
+                        <div style="font-size: 0.75rem; font-weight: 600; color: #64748b; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #64748b;"></span>
+                            Sin Ruta
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 6px; padding-left: 16px;">
+                            ${tiendasSinRuta.map(tienda => `
+                                <div class="tienda-pendiente" 
+                                     data-tienda="${escapeHtml(tienda.tienda)}"
+                                     data-transferencias='${JSON.stringify(tienda.transferencias).replace(/'/g, "&#39;")}'
+                                     style="
+                                        background: #64748b12;
+                                        border: 1px solid #64748b30;
+                                        border-radius: 6px;
+                                        padding: 6px 12px;
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 8px;
+                                        cursor: pointer;
+                                        transition: all 0.2s;
+                                        flex: 0 1 auto;
+                                        font-size: 0.8rem;
+                                    "
+                                    onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)';"
+                                    onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
+                                    <span style="font-size: 0.9rem;">🏪</span>
+                                    <span style="font-weight: 500; color: #1e293b;">${escapeHtml(tienda.tienda)}</span>
+                                    <span style="
+                                        background: #64748b;
+                                        color: white;
+                                        border-radius: 50%;
+                                        padding: 0 8px;
+                                        font-size: 0.7rem;
+                                        font-weight: 700;
+                                        min-width: 20px;
+                                        text-align: center;
+                                    ">${tienda.cantidad}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Si no hay tiendas en este almacén
+            if (!tiendasHtml) {
+                tiendasHtml = `
+                    <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 0.9rem;">
+                        ✅ No hay transferencias pendientes desde este almacén
+                    </div>
+                `;
+            }
+
+            // Pestaña
+            tabsHtmlGenerado += `
+                <button class="almacen-tab ${activeClass}" 
+                        data-almacen="${almacen}"
+                        style="
+                            background: ${activeClass ? color : 'transparent'};
+                            color: ${activeClass ? 'white' : color};
+                            border: none;
+                            padding: 8px 16px;
+                            border-radius: 8px 8px 0 0;
+                            font-weight: 600;
+                            font-size: 0.8rem;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            border-bottom: ${activeClass ? 'none' : `2px solid ${color}30`};
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                        "
+                        onmouseover="if(!this.classList.contains('active')){this.style.background='${color}20';}"
+                        onmouseout="if(!this.classList.contains('active')){this.style.background='transparent';}">
+                    <span>${icono}</span>
+                    ${almacen}
+                    <span style="
+                        background: ${activeClass ? 'rgba(255,255,255,0.2)' : color};
+                        color: ${activeClass ? 'white' : 'white'};
+                        border-radius: 50%;
+                        padding: 0 8px;
+                        font-size: 0.65rem;
+                        min-width: 18px;
+                        text-align: center;
+                    ">${almacenData.totalTransferencias}</span>
+                </button>
+            `;
+
+            // Contenido
+            contentHtmlGenerado += `
+                <div class="almacen-content" data-almacen="${almacen}" style="display: ${displayStyle}; padding: 16px 0;">
+                    ${tiendasHtml}
                 </div>
-            </div>
-        `;
+            `;
+
+            primeraPestana = false;
+        }
     }
 
-    // Tiendas sin ruta
-    if (tiendasSinRuta.length > 0) {
-        tiendasHtml += `
-            <div style="margin-bottom: 12px;">
-                <div style="font-size: 0.8rem; font-weight: 600; color: #64748b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                    <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #64748b;"></span>
-                    Sin Ruta Asignada
-                </div>
-                <div style="display: flex; flex-wrap: wrap; gap: 8px; padding-left: 20px;">
-                    ${tiendasSinRuta.map(tienda => `
-                        <div class="tienda-pendiente" 
-                             data-tienda="${escapeHtml(tienda.tienda)}"
-                             data-transferencias='${JSON.stringify(tienda.transferencias).replace(/'/g, "&#39;")}'
-                             style="
-                                background: #64748b15;
-                                border: 1px solid #64748b40;
-                                border-radius: 8px;
-                                padding: 8px 14px;
-                                display: flex;
-                                align-items: center;
-                                gap: 10px;
-                                cursor: pointer;
-                                transition: all 0.2s;
-                                flex: 0 1 auto;
-                            "
-                            onmouseover="this.style.transform='scale(1.03)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';"
-                            onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
-                            <span style="font-size: 1rem;">🏪</span>
-                            <span style="font-weight: 500; color: #1e293b; font-size: 0.85rem;">${escapeHtml(tienda.tienda)}</span>
-                            <span style="
-                                background: #64748b;
-                                color: white;
-                                border-radius: 50%;
-                                padding: 1px 9px;
-                                font-size: 0.75rem;
-                                font-weight: 700;
-                                min-width: 22px;
-                                text-align: center;
-                            ">${tienda.cantidad}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
+    // Si no hay ningún almacén con datos
+    if (!tabsHtmlGenerado) {
+        mostrarSinTransferencias();
+        return;
     }
 
     // Contenido del modal
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 700px; animation: modalFadeIn 0.3s ease-out;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);">
+        <div class="modal-content" style="max-width: 750px; animation: modalFadeIn 0.3s ease-out;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);">
                 <h3 style="display: flex; align-items: center; gap: 10px;">
                     <span style="font-size: 1.8rem;">📦</span>
                     <span>Transferencias Pendientes de Recibir</span>
                 </h3>
                 <span class="close-modal" id="cerrarModalTransferencias" style="font-size: 32px; cursor: pointer;">&times;</span>
             </div>
-            <div class="modal-body" style="padding: 24px;">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <div style="font-size: 2.5rem; font-weight: 800; color: #ea580c;">
-                        ${totalTransferencias}
+            <div class="modal-body" style="padding: 20px;">
+                <div style="text-align: center; margin-bottom: 16px;">
+                    <div style="font-size: 2rem; font-weight: 800; color: #ea580c;">
+                        ${data.total}
                     </div>
-                    <div style="font-size: 0.9rem; color: #64748b;">
+                    <div style="font-size: 0.85rem; color: #64748b;">
                         transferencia(s) en tránsito pendientes de recibir
                     </div>
                 </div>
 
-                <div style="border-top: 2px solid #fef3c7; padding-top: 16px; margin-top: 8px;">
-                    <div style="font-weight: 600; color: #1e40af; margin-bottom: 12px; font-size: 0.9rem;">
-                        🏪 Tiendas con transferencias pendientes (clic para ver detalles):
+                <div style="border-top: 2px solid #e2e8f0; padding-top: 12px;">
+                    <div style="display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 2px solid #e2e8f0;">
+                        ${tabsHtmlGenerado}
                     </div>
-                    ${tiendasHtml}
+                    <div style="padding-top: 8px;">
+                        ${contentHtmlGenerado}
+                    </div>
                 </div>
-
-                
             </div>
             <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
                 <button id="btnActualizarTransferencias" style="
@@ -400,6 +464,38 @@ function mostrarModalTransferencias(tiendas, totalTransferencias) {
     `;
 
     document.body.appendChild(modal);
+
+    // Eventos de pestañas
+    document.querySelectorAll('.almacen-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            const almacen = this.dataset.almacen;
+            
+            // Desactivar todas las pestañas
+            document.querySelectorAll('.almacen-tab').forEach(t => {
+                t.classList.remove('active');
+                t.style.background = 'transparent';
+                t.style.color = t.dataset.color || '#64748b';
+                t.style.borderBottom = `2px solid ${t.dataset.color || '#64748b'}30`;
+            });
+            
+            // Activar esta pestaña
+            this.classList.add('active');
+            const color = this.dataset.color || '#64748b';
+            this.style.background = color;
+            this.style.color = 'white';
+            this.style.borderBottom = 'none';
+            
+            // Mostrar contenido
+            document.querySelectorAll('.almacen-content').forEach(c => {
+                c.style.display = 'none';
+            });
+            document.querySelector(`.almacen-content[data-almacen="${almacen}"]`).style.display = 'block';
+        });
+        
+        // Guardar color para usar en eventos
+        const color = coloresAlmacenes[tab.textContent.trim().split(' ')[0]] || '#64748b';
+        tab.dataset.color = color;
+    });
 
     // Eventos para cerrar
     document.getElementById('cerrarModalTransferencias').addEventListener('click', cerrarModalTransferencias);
@@ -529,6 +625,62 @@ function abrirDetalleTienda(tiendaNombre, transferencias) {
     });
 }
 
+// ==================== MOSTRAR MENSAJE SIN TRANSFERENCIAS ====================
+
+function mostrarSinTransferencias() {
+    const modal = document.createElement('div');
+    modal.id = 'modalTransferenciasPendientes';
+    modal.className = 'modal';
+    modal.style.cssText = `
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    `;
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 450px; animation: modalFadeIn 0.3s ease-out;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
+                <h3 style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.8rem;">✅</span>
+                    <span>Sin Transferencias Pendientes</span>
+                </h3>
+                <span class="close-modal" onclick="cerrarModalTransferencias()" style="font-size: 32px; cursor: pointer;">&times;</span>
+            </div>
+            <div class="modal-body" style="padding: 30px; text-align: center;">
+                <div style="font-size: 4rem; margin-bottom: 16px;">📦</div>
+                <div style="font-size: 1.2rem; font-weight: 600; color: #1e293b; margin-bottom: 8px;">
+                    No hay transferencias en tránsito
+                </div>
+                <div style="color: #64748b; font-size: 0.9rem;">
+                    Todas las transferencias han sido recibidas correctamente.
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: center;">
+                <button onclick="cerrarModalTransferencias()" style="
+                    background: #059669;
+                    color: white;
+                    border: none;
+                    padding: 8px 30px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                ">
+                    Entendido
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            cerrarModalTransferencias();
+        }
+    });
+}
+
 // ==================== CERRAR MODALES ====================
 
 function cerrarModalTransferencias() {
@@ -556,12 +708,10 @@ function cerrarDetalleTienda() {
 // ==================== ABRIR MODAL DESDE BOTÓN ====================
 
 function abrirModalTransferencias() {
-    // Verificar si hay datos en caché
     if (cachedTransferenciasData) {
         console.log('📦 Mostrando datos en caché...');
-        mostrarModalTransferencias(cachedTransferenciasData.tiendas, cachedTransferenciasData.total);
+        mostrarModalTransferencias(cachedTransferenciasData);
     } else {
-        // Si no hay caché, consultar nuevamente
         verificarTransferenciasPendientes(true);
     }
 }
@@ -569,7 +719,6 @@ function abrirModalTransferencias() {
 // ==================== EJECUTAR AL INICIO ====================
 
 function initAlertasTransferencias() {
-    // Esperar a que el usuario esté autenticado
     const checkLogin = setInterval(() => {
         const userBar = document.getElementById('userInfoBar');
         if (userBar && userBar.style.display !== 'none') {
@@ -583,7 +732,6 @@ function initAlertasTransferencias() {
         }
     }, 500);
 
-    // También ejecutar cuando se cambie de módulo (por si el login fue posterior)
     document.addEventListener('moduleChanged', function() {
         const userBar = document.getElementById('userInfoBar');
         if (userBar && userBar.style.display !== 'none' && !alertaTransferenciasCargada) {
