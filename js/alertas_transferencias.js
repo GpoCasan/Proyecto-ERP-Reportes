@@ -86,9 +86,9 @@ async function verificarTransferenciasPendientes(forzar = false) {
                 if (nombreAlmacen.includes('tae')) {
                     almacenOrigen = 'TAE';
                 } else if (nombreAlmacen.includes('equipos matriz') || nombreAlmacen.includes('equipos matrix')) {
-                    almacenOrigen = 'Equipos';
+                    almacenOrigen = 'Equipos Matriz';
                 } else if (nombreAlmacen.includes('accesorios matriz') || nombreAlmacen.includes('accesorios matrix')) {
-                    almacenOrigen = 'Accesorios';
+                    almacenOrigen = 'Accesorios Matriz';
                 } else {
                     almacenOrigen = 'Otros';
                 }
