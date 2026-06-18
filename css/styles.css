@@ -2071,3 +2071,25 @@ code {
     background: rgba(0,0,0,0.2) !important;
     transform: scale(1.1);
 }
+/* ==================== ANÁLISIS DE MARGEN ==================== */
+
+#analisisMargenResults .stat-card {
+    transition: all 0.3s ease;
+}
+
+#analisisMargenResults .stat-card:hover {
+    transform: translateY(-2px);
+}
+
+#margenChart {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.analisis-margen-filters .filter-group input:focus,
+.analisis-margen-filters .filter-group select:focus {
+    outline: none;
+    border-color: #f97316;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+}

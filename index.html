@@ -145,6 +145,11 @@
                 <div class="card-title">Ventas Totales</div>
             </div>        
 
+            <div class="nav-card" data-module="analisis_margen">
+                <div class="card-icon">📊</div>
+                <div class="card-title">Análisis de Margen</div>
+            </div>
+
             <div class="nav-card" data-module="servicios">
                 <div class="card-icon">💰</div>
                 <div class="card-title">Cobro de Servicios</div>
@@ -282,6 +287,7 @@
                 </div>
             </div>
         </div>
+
         <!-- MÓDULO: FACTURAS (PDF → CSV → EXCEL) -->
         <div id="facturasModule" class="module">
             <div class="card">
@@ -446,6 +452,7 @@
                     </div>
                 </div>
             </div>
+
         <!-- MÓDULO 5: TAE -->
         <div id="taeModule" class="module">
             <div class="card">
@@ -549,6 +556,49 @@
                         <span style="font-size: 12px; color: #64748b;">💡 Desmarca para ver solo el día seleccionado</span>
                     </div>
                     <div id="ventasTotalesResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MÓDULO: ANÁLISIS DE MARGEN POR CATEGORÍA -->
+        <div id="analisis_margenModule" class="module">
+            <div class="card">
+                <div class="card-header">
+                    <h2>📊 Análisis de Margen</h2>
+                </div>
+                <div class="card-body">
+                    <div id="analisisMargenErrorAlert" class="alert alert-error"></div>
+                    <div id="analisisMargenInfoAlert" class="alert alert-info"></div>
+                    
+                    <div class="analisis-margen-filters" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; background: #f8fafc; padding: 20px; border-radius: 16px;">
+                        <div class="filter-group">
+                            <label style="display: block; font-size: 0.7rem; font-weight: 600; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">📅 Fecha Inicio</label>
+                            <input type="date" id="margenStartDate" style="width: 100%; padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.85rem;">
+                        </div>
+                        <div class="filter-group">
+                            <label style="display: block; font-size: 0.7rem; font-weight: 600; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">📅 Fecha Fin</label>
+                            <input type="date" id="margenEndDate" style="width: 100%; padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.85rem;">
+                        </div>
+                        <div class="filter-group">
+                            <label style="display: block; font-size: 0.7rem; font-weight: 600; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">📂 Categoría</label>
+                            <select id="margenCategoriaSelect" style="width: 100%; padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.85rem;">
+                                <option value="todos">Todas las categorías</option>
+                                <option value="EQUIPOS_TELCEL">📱 Equipos Telcel</option>
+                                <option value="EQUIPOS_LIBRE">🔓 Equipos Libre</option>
+                                <option value="ACCESORIOS">🔌 Accesorios</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button id="searchAnalisisMargenBtn" class="btn-tae" style="width: 100%; padding: 12px; margin-bottom: 20px;">
+                        🔍 Analizar Margen
+                    </button>
+                    
+                    <div id="analisisMargenResults" style="display: none;">
+                        <div style="margin-bottom: 24px;">
+                            <canvas id="margenChart" style="max-height: 300px; width: 100%;"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -825,6 +875,7 @@
     <script src="js/modules/compras.js"></script>
     <script src="js/modules/facturas.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/modules/analisis_margen.js"></script>
     <script src="js/alertas_transferencias.js"></script>
 </body>
 </html>

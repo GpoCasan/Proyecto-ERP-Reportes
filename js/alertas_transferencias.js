@@ -2,6 +2,7 @@
 
 // Variable para evitar múltiples ejecuciones automáticas
 let alertaTransferenciasCargada = false;
+let alertaTransferenciasInicializada = false;
 // Variable para almacenar los datos de las transferencias
 let cachedTransferenciasData = null;
 
@@ -104,9 +105,6 @@ async function verificarTransferenciasPendientes(forzar = false) {
 
             // Obtener fecha
             const fecha = transfer.dispatched_at ? formatDateOnly(transfer.dispatched_at) : 'No disponible';
-
-            // Clave compuesta: almacen_origen|tienda
-            const key = `${almacenOrigen}|${tiendaNombre}`;
 
             if (!almacenesMap.has(almacenOrigen)) {
                 almacenesMap.set(almacenOrigen, new Map());
@@ -628,17 +626,22 @@ function abrirDetalleTienda(tiendaNombre, transferencias) {
 // ==================== MOSTRAR MENSAJE SIN TRANSFERENCIAS ====================
 
 function mostrarSinTransferencias() {
-    const modal = document.createElement('div');
-    modal.id = 'modalTransferenciasPendientes';
-    modal.className = 'modal';
-    modal.style.cssText = `
+    const modal = document.getElementById('modalTransferenciasPendientes');
+    if (modal) {
+        modal.remove();
+    }
+
+    const newModal = document.createElement('div');
+    newModal.id = 'modalTransferenciasPendientes';
+    newModal.className = 'modal';
+    newModal.style.cssText = `
         display: flex !important;
         align-items: center;
         justify-content: center;
         z-index: 9999;
     `;
 
-    modal.innerHTML = `
+    newModal.innerHTML = `
         <div class="modal-content" style="max-width: 450px; animation: modalFadeIn 0.3s ease-out;">
             <div class="modal-header" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
                 <h3 style="display: flex; align-items: center; gap: 10px;">
@@ -672,10 +675,10 @@ function mostrarSinTransferencias() {
         </div>
     `;
 
-    document.body.appendChild(modal);
+    document.body.appendChild(newModal);
 
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
+    newModal.addEventListener('click', function(e) {
+        if (e.target === newModal) {
             cerrarModalTransferencias();
         }
     });
@@ -716,14 +719,24 @@ function abrirModalTransferencias() {
     }
 }
 
-// ==================== EJECUTAR AL INICIO ====================
+// ==================== EJECUTAR AL INICIO (UNA SOLA VEZ) ====================
 
 function initAlertasTransferencias() {
+    // Evitar múltiples inicializaciones
+    if (alertaTransferenciasInicializada) {
+        console.log('⏳ Alerta de transferencias ya inicializada');
+        return;
+    }
+    
+    alertaTransferenciasInicializada = true;
+    console.log('🔔 Inicializando alerta de transferencias...');
+    
+    // Verificar una sola vez después del login
     const checkLogin = setInterval(() => {
         const userBar = document.getElementById('userInfoBar');
         if (userBar && userBar.style.display !== 'none') {
             clearInterval(checkLogin);
-            console.log('🔐 Usuario autenticado, verificando transferencias...');
+            console.log('🔐 Usuario autenticado, verificando transferencias (una sola vez)...');
             setTimeout(() => {
                 if (typeof verificarTransferenciasPendientes === 'function') {
                     verificarTransferenciasPendientes(true);
@@ -731,15 +744,6 @@ function initAlertasTransferencias() {
             }, 2000);
         }
     }, 500);
-
-    document.addEventListener('moduleChanged', function() {
-        const userBar = document.getElementById('userInfoBar');
-        if (userBar && userBar.style.display !== 'none' && !alertaTransferenciasCargada) {
-            if (typeof verificarTransferenciasPendientes === 'function') {
-                verificarTransferenciasPendientes(true);
-            }
-        }
-    });
 }
 
 // ==================== EXPORTAR FUNCIONES GLOBALES ====================

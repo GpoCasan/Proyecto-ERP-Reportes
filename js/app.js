@@ -121,6 +121,16 @@ function setDefaultDates() {
     if (ingresosEndDateEl) {
         ingresosEndDateEl.value = ingresosEndDate.toISOString().split('T')[0];
     }
+    
+    // Fechas por defecto para el módulo de Análisis de Margen (últimos 30 días)
+    const margenStartDate = document.getElementById('margenStartDate');
+    const margenEndDate = document.getElementById('margenEndDate');
+    if (margenStartDate) {
+        margenStartDate.value = startDateTransfer.toISOString().split('T')[0];
+    }
+    if (margenEndDate) {
+        margenEndDate.value = endDateTransfer.toISOString().split('T')[0];
+    }
 }
 
 // Inicializar navegación de tarjetas
@@ -142,6 +152,9 @@ function initNavigation() {
             }
             if (moduleName === 'transferencias_pendientes' && typeof initTransferenciasPendientesModule === 'function') {
                 setTimeout(initTransferenciasPendientesModule, 100);
+            }
+            if (moduleName === 'analisis_margen' && typeof initAnalisisMargenModule === 'function') {
+                setTimeout(initAnalisisMargenModule, 100);
             }
         });
     });
@@ -234,8 +247,25 @@ function initTransferenciasPendientesIfNeeded() {
     }
 }
 
+// ==================== INICIALIZAR MÓDULO DE ANÁLISIS DE MARGEN ====================
+function initAnalisisMargenIfNeeded() {
+    const module = document.getElementById('analisis_margenModule');
+    if (module && module.classList.contains('active-module')) {
+        if (typeof initAnalisisMargenModule === 'function') {
+            setTimeout(initAnalisisMargenModule, 100);
+        }
+    }
+}
+
 // ==================== INICIALIZAR ALERTA DE TRANSFERENCIAS ====================
 function initAlertasTransferencias() {
+    // Verificar si ya se inicializó
+    if (window._alertasTransferenciasIniciadas) {
+        console.log('⏳ Alerta de transferencias ya iniciada');
+        return;
+    }
+    window._alertasTransferenciasIniciadas = true;
+    
     // Esperar a que el usuario esté autenticado
     const checkLogin = setInterval(() => {
         const userBar = document.getElementById('userInfoBar');
@@ -244,9 +274,9 @@ function initAlertasTransferencias() {
             console.log('🔐 Usuario autenticado, verificando transferencias...');
             setTimeout(() => {
                 if (typeof verificarTransferenciasPendientes === 'function') {
-                    verificarTransferenciasPendientes();
+                    verificarTransferenciasPendientes(true);
                 }
-            }, 1500);
+            }, 2000);
         }
     }, 500);
 
@@ -257,12 +287,26 @@ function initAlertasTransferencias() {
             if (typeof verificarTransferenciasPendientes === 'function') {
                 // Verificar si ya se cargó la alerta para no duplicar
                 const alertaExistente = document.getElementById('alertaTransferenciasContainer');
-                if (!alertaExistente) {
+                if (!alertaExistente && !window._alertasTransferenciasCargadas) {
                     verificarTransferenciasPendientes();
                 }
             }
         }
     });
+}
+
+// ==================== BOTÓN PARA ABRIR MODAL DE TRANSFERENCIAS ====================
+function setupTransferenciasButton() {
+    const openTransferenciasBtn = document.getElementById('openTransferenciasBtn');
+    if (openTransferenciasBtn) {
+        openTransferenciasBtn.addEventListener('click', function() {
+            if (typeof abrirModalTransferencias === 'function') {
+                abrirModalTransferencias();
+            } else {
+                console.warn('⚠️ La función abrirModalTransferencias no está disponible');
+            }
+        });
+    }
 }
 
 // Ejecutar inicialización después de que el DOM esté listo
@@ -271,17 +315,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof initAuth === 'function') {
         initAuth();
     }
-    // Botón para abrir modal de transferencias pendientes
-        const openTransferenciasBtn = document.getElementById('openTransferenciasBtn');
-        if (openTransferenciasBtn) {
-            openTransferenciasBtn.addEventListener('click', function() {
-                if (typeof abrirModalTransferencias === 'function') {
-                    abrirModalTransferencias();
-                } else {
-                    console.warn('⚠️ La función abrirModalTransferencias no está disponible');
-                }
-            });
-        }
+    
+    // Configurar el botón de transferencias
+    setupTransferenciasButton();
     
     // Configurar el resto de eventos
     initEventListeners();
@@ -299,6 +335,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Inicializar módulo de transferencias pendientes si es necesario
     initTransferenciasPendientesIfNeeded();
+    
+    // Inicializar módulo de análisis de margen si es necesario
+    initAnalisisMargenIfNeeded();
     
     // Inicializar alerta de transferencias pendientes
     if (typeof initAlertasTransferencias === 'function') {

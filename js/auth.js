@@ -2,11 +2,11 @@
 
 // Configuración de usuarios (hardcodeada temporalmente)
 const USERS = {
-    "administrador": {
+    "admin": {
         password: "admin2026",
         role: "admin",
         name: "Administrador",
-        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "transferencias_pendientes", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas"],
+        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "transferencias_pendientes", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas", "analisis_margen"],
         showTaeBalance: true
     },
     "comercial": {
@@ -114,14 +114,7 @@ function updateUIForUser(user) {
     // Mostrar/ocultar el SALDO TAE según permisos
     updateTaeBalanceVisibility(user);
     
-    // ====== NUEVO: Verificar transferencias pendientes para TODOS los usuarios ======
-    setTimeout(() => {
-        if (typeof verificarTransferenciasPendientes === 'function' && !alertaTransferenciasMostrada) {
-            console.log('🔔 Verificando transferencias pendientes para todos los usuarios...');
-            verificarTransferenciasPendientes();
-            alertaTransferenciasMostrada = true;
-        }
-    }, 2000);
+    
 }
 
 // Función para cerrar sesión
