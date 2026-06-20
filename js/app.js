@@ -156,6 +156,9 @@ function initNavigation() {
             if (moduleName === 'analisis_margen' && typeof initAnalisisMargenModule === 'function') {
                 setTimeout(initAnalisisMargenModule, 100);
             }
+            if (moduleName === 'tae_apps' && typeof initTaeAppsModule === 'function') {
+                setTimeout(initTaeAppsModule, 100);
+            }
         });
     });
 }
@@ -217,7 +220,6 @@ function initSaleSearchEvents() {
 
 // ==================== INICIALIZAR MÓDULO DE COMPRAS ====================
 function initComprasIfNeeded() {
-    // Verificar si el módulo de compras está visible y no se ha inicializado
     const comprasModule = document.getElementById('comprasModule');
     if (comprasModule && comprasModule.classList.contains('active-module')) {
         if (typeof initComprasModule === 'function') {
@@ -228,7 +230,6 @@ function initComprasIfNeeded() {
 
 // ==================== INICIALIZAR MÓDULO DE FACTURAS ====================
 function initFacturasIfNeeded() {
-    // Verificar si el módulo de facturas está visible y no se ha inicializado
     const facturasModule = document.getElementById('facturasModule');
     if (facturasModule && facturasModule.classList.contains('active-module')) {
         if (typeof initFacturasModule === 'function') {
@@ -253,6 +254,16 @@ function initAnalisisMargenIfNeeded() {
     if (module && module.classList.contains('active-module')) {
         if (typeof initAnalisisMargenModule === 'function') {
             setTimeout(initAnalisisMargenModule, 100);
+        }
+    }
+}
+
+// ==================== INICIALIZAR MÓDULO TAE APPS ====================
+function initTaeAppsIfNeeded() {
+    const module = document.getElementById('tae_appsModule');
+    if (module && module.classList.contains('active-module')) {
+        if (typeof initTaeAppsModule === 'function') {
+            setTimeout(initTaeAppsModule, 100);
         }
     }
 }
@@ -285,7 +296,6 @@ function initAlertasTransferencias() {
         const userBar = document.getElementById('userInfoBar');
         if (userBar && userBar.style.display !== 'none') {
             if (typeof verificarTransferenciasPendientes === 'function') {
-                // Verificar si ya se cargó la alerta para no duplicar
                 const alertaExistente = document.getElementById('alertaTransferenciasContainer');
                 if (!alertaExistente && !window._alertasTransferenciasCargadas) {
                     verificarTransferenciasPendientes();
@@ -338,6 +348,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Inicializar módulo de análisis de margen si es necesario
     initAnalisisMargenIfNeeded();
+    
+    // Inicializar módulo TAE APPS si es necesario
+    initTaeAppsIfNeeded();
     
     // Inicializar alerta de transferencias pendientes
     if (typeof initAlertasTransferencias === 'function') {

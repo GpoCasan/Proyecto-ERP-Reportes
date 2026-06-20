@@ -140,6 +140,11 @@
                 <div class="card-title">TAE</div>
             </div>
 
+            <div class="nav-card" data-module="tae_apps">
+                <div class="card-icon">📱</div>
+                <div class="card-title">TAE - APPS CREATIVAS</div>
+            </div>
+
             <div class="nav-card" data-module="ventasTotales">
                 <div class="card-icon">📈</div>
                 <div class="card-title">Ventas Totales</div>
@@ -532,6 +537,69 @@
             </div>
         </div>
 
+<!-- MÓDULO: TAE APPS CREATIVAS -->
+<div id="tae_appsModule" class="module">
+    <div class="card">
+        <div class="card-header">
+            <h2>📱 TAE - APPS CREATIVAS</h2>
+        </div>
+        <div class="card-body">
+            <!-- Alertas -->
+            <div id="taeAppsErrorAlert" class="alert alert-error"></div>
+            <div id="taeAppsInfoAlert" class="alert alert-info"></div>
+            <div id="taeAppsSuccessAlert" class="alert alert-success"></div>
+
+            <!-- Filtros -->
+            <div class="tae-apps-filters">
+                <div class="filter-group">
+                    <label>📅 Fecha Inicio</label>
+                    <input type="date" id="taeAppsStartDate">
+                </div>
+                <div class="filter-group">
+                    <label>📅 Fecha Fin</label>
+                    <input type="date" id="taeAppsEndDate">
+                </div>
+                <div class="filter-group" style="justify-content:flex-end;">
+                    <button class="btn-consultar" id="taeAppsConsultarBtn">🔍 Consultar</button>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div id="taeAppsProgressContainer" class="progress-container hidden">
+                <div class="progress-bar" id="taeAppsProgressBar"></div>
+                <div class="progress-text" id="taeAppsProgressText">Cargando...</div>
+            </div>
+
+            <!-- Resultados -->
+            <div id="taeAppsResults" class="hidden">
+                <!-- Tarjetas de estadísticas -->
+                <div class="tae-apps-stats-grid" id="taeAppsStatsContainer"></div>
+                
+                <!-- Título de la tabla -->
+                <!-- <>div class="tae-apps-section-title">
+                    📍 Resumen por Sucursal y Línea <span class="count" id="taeAppsBranchCount">0</span>
+                </div> -->
+                
+                <!-- Tabla principal -->
+                <div class="table-container" id="taeAppsMainTable"></div>
+                
+                <!-- Botón de exportar a Excel -->
+                <div id="taeAppsExportContainer" class="hidden" style="display: flex; justify-content: flex-end; margin-top: 20px;">
+                    <button id="taeAppsExportBtn" class="btn-export-excel" style="background: #059669; padding: 10px 24px; border-radius: 8px; color: white; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                        📊 Exportar a Excel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sin resultados -->
+            <div id="taeAppsNoResults" class="hidden no-results">
+                <div class="icon">📭</div>
+                <p>No se encontraron ventas en el período seleccionado</p>
+            </div>
+        </div>
+    </div>
+</div>
+
         <!-- MÓDULO: VENTAS TOTALES -->
         <div id="ventasTotalesModule" class="module">
             <div class="card">
@@ -875,6 +943,7 @@
     <script src="js/modules/compras.js"></script>
     <script src="js/modules/facturas.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/modules/tae_apps.js"></script>
     <script src="js/modules/analisis_margen.js"></script>
     <script src="js/alertas_transferencias.js"></script>
 </body>

@@ -2093,3 +2093,437 @@ code {
     border-color: #f97316;
     box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 }
+/* ==================== TAE APPS CREATIVAS - DISEÑO MODERNO ==================== */
+
+/* Filtros */
+.tae-apps-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    padding: 24px;
+    border-radius: 16px;
+    margin-bottom: 24px;
+    border: 1px solid #e2e8f0;
+}
+
+.tae-apps-filters .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tae-apps-filters .filter-group label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #1e293b;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 0;
+}
+
+.tae-apps-filters .filter-group input {
+    padding: 12px 16px;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    width: 100%;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.tae-apps-filters .filter-group input:focus {
+    outline: none;
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.1);
+}
+
+.tae-apps-filters .filter-group:last-child {
+    justify-content: flex-end;
+}
+
+.tae-apps-filters .btn-consultar {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    color: white;
+    border: none;
+    padding: 12px 32px;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.3s ease;
+    letter-spacing: 0.5px;
+}
+
+.tae-apps-filters .btn-consultar:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(124, 58, 237, 0.35);
+}
+
+.tae-apps-filters .btn-consultar:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.tae-apps-filters .btn-consultar .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 0.6s linear infinite;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* Grid de estadísticas moderno */
+.tae-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+/* Tarjeta principal */
+.tae-stat-main {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-radius: 16px;
+    padding: 24px 28px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.tae-stat-main-icon {
+    font-size: 2.8rem;
+    background: rgba(255,255,255,0.1);
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tae-stat-main-content {
+    flex: 1;
+}
+
+.tae-stat-main-number {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: white;
+    letter-spacing: -0.5px;
+}
+
+.tae-stat-main-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.6);
+    margin-top: 2px;
+}
+
+.tae-stat-main-sub {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.5);
+    margin-top: 4px;
+}
+
+/* Tarjetas de líneas en grid */
+.tae-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+@media (min-width: 768px) {
+    .tae-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1200px) {
+    .tae-stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* Tarjeta de línea individual */
+.tae-stat-linea {
+    background: white;
+    border-radius: 12px;
+    padding: 16px 20px;
+    border-left: 4px solid #64748b;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.tae-stat-linea:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.tae-stat-linea-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.tae-stat-linea-number {
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.tae-stat-linea-sub {
+    font-size: 0.7rem;
+    color: #94a3b8;
+}
+
+.tae-stat-linea-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    border-radius: 0 3px 3px 0;
+    transition: width 0.6s ease;
+    opacity: 0.7;
+}
+
+/* Título de sección */
+.tae-apps-section-title {
+    color: #1e293b;
+    margin: 32px 0 16px;
+    font-size: 1rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    letter-spacing: -0.3px;
+}
+
+.tae-apps-section-title .count {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: white;
+    padding: 2px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* Tabla moderna */
+.tae-table-wrapper {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: white;
+}
+
+.tae-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    min-width: 600px;
+}
+
+.tae-table thead th {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    color: #475569;
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 14px 16px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.tae-col-num {
+    width: 50px;
+    text-align: center;
+}
+
+.tae-col-sucursal {
+    text-align: left;
+}
+
+.tae-col-ventas {
+    text-align: center;
+    width: 80px;
+}
+
+.tae-col-monto {
+    text-align: right;
+    width: 140px;
+}
+
+/* Filas */
+.tae-row-branch {
+    background: #f8fafc;
+    border-top: 2px solid #e2e8f0;
+}
+
+.tae-row-branch td {
+    padding: 12px 16px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.tae-row-branch .tae-branch-icon {
+    margin-right: 8px;
+}
+
+.tae-row-linea td {
+    padding: 8px 16px;
+    color: #475569;
+}
+
+.tae-row-linea td:first-child {
+    border-left: 3px solid transparent;
+}
+
+.tae-row-linea:hover td {
+    background: #f8fafc;
+}
+
+/* Badge de línea */
+.tae-linea-badge {
+    display: inline-block;
+    padding: 2px 12px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: white;
+}
+
+/* Subtotal */
+.tae-row-subtotal td {
+    padding: 10px 16px;
+    background: #f1f5f9;
+    border-top: 1px dashed #cbd5e1;
+    font-weight: 600;
+}
+
+.tae-col-subtotal-label {
+    text-align: right;
+    color: #475569;
+    font-size: 0.75rem;
+}
+
+/* Total general */
+.tae-row-total td {
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-top: 3px solid #f59e0b;
+    font-weight: 700;
+    color: #92400e;
+}
+
+.tae-col-total-label {
+    text-align: right;
+    font-size: 0.85rem;
+}
+
+/* Progress bar */
+.tae-progress-container {
+    width: 100%;
+    background: #f1f5f9;
+    border-radius: 8px;
+    margin: 10px 0;
+    overflow: hidden;
+}
+
+.tae-progress-container .progress-bar {
+    height: 8px;
+    background: linear-gradient(90deg, #7c3aed, #8b5cf6);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.tae-progress-container .progress-text {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+/* Sin resultados */
+.tae-no-results {
+    text-align: center;
+    padding: 60px 20px;
+    color: #94a3b8;
+}
+
+.tae-no-results .icon {
+    font-size: 4rem;
+    margin-bottom: 16px;
+}
+
+.tae-no-results p {
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+/* Botón exportar mejorado */
+#taeAppsExportBtn {
+    transition: all 0.3s ease;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+#taeAppsExportBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(5, 150, 105, 0.35);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .tae-apps-filters {
+        grid-template-columns: 1fr;
+        padding: 16px;
+    }
+    
+    .tae-stat-main {
+        flex-direction: column;
+        text-align: center;
+        padding: 20px;
+    }
+    
+    .tae-stat-main-number {
+        font-size: 1.6rem;
+    }
+    
+    .tae-table {
+        font-size: 0.75rem;
+        min-width: 500px;
+    }
+    
+    .tae-col-monto {
+        width: 100px;
+    }
+    
+    .tae-col-ventas {
+        width: 60px;
+    }
+}
+
+@media (max-width: 480px) {
+    .tae-stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .tae-stat-linea-number {
+        font-size: 1.1rem;
+    }
+}
+
+.hidden {
+    display: none !important;
+}
