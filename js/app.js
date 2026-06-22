@@ -319,6 +319,20 @@ function setupTransferenciasButton() {
     }
 }
 
+// ==================== BOTÓN PARA ABRIR MODAL DE INVENTARIO TAE ====================
+function setupTaeInventarioButton() {
+    const openTaeInventarioBtn = document.getElementById('openTaeInventarioBtn');
+    if (openTaeInventarioBtn) {
+        openTaeInventarioBtn.addEventListener('click', function() {
+            if (typeof abrirInventarioTAE === 'function') {
+                abrirInventarioTAE();
+            } else {
+                console.warn('⚠️ La función abrirInventarioTAE no está disponible');
+            }
+        });
+    }
+}
+
 // Ejecutar inicialización después de que el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializar autenticación primero
@@ -352,6 +366,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inicializar módulo TAE APPS si es necesario
     initTaeAppsIfNeeded();
     
+    // Configurar el botón de inventario TAE
+    setupTaeInventarioButton();
+
     // Inicializar alerta de transferencias pendientes
     if (typeof initAlertasTransferencias === 'function') {
         initAlertasTransferencias();
