@@ -1,4 +1,4 @@
-// ==================== MÓDULO: INGRESOS (OPTIMIZADO - UNA CONSULTA POR DÍA) ====================
+// ==================== MÓDULO: INGRESOS (OPTIMIZADO) ====================
 
 let cachedIngresosData = null;
 
@@ -19,6 +19,7 @@ const CONCEPTOS_CONFIG = {
 const queryCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
+// Función para obtener o establecer caché
 function getCached(key) {
     const cached = queryCache.get(key);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -31,193 +32,7 @@ function setCached(key, data) {
     queryCache.set(key, { data, timestamp: Date.now() });
 }
 
-// ==================== FUNCIÓN ÚNICA PARA CONSULTAR TODAS LAS VENTAS DE UN DÍA ====================
-
-async function fetchAllSalesForDay(startDateTime, endDateTime, branchId) {
-    const cacheKey = `all_sales_${startDateTime}_${endDateTime}_${branchId}`;
-    const cached = getCached(cacheKey);
-    if (cached) {
-        console.log(`📦 [CACHÉ] Usando caché para: ${startDateTime}`);
-        return cached;
-    }
-
-    console.log(`📡 [CONSULTA] Obteniendo todas las ventas del día: ${startDateTime}`);
-    
-    let allSales = [];
-    let currentPage = 1;
-    let lastPage = 1;
-
-    let baseUrl = `${CONFIG.API_SALES}?page=1&per_page=100&total=0&start_date=${startDateTime}&end_date=${endDateTime}`;
-    if (branchId && branchId !== '') {
-        baseUrl += `&branch_ids[]=${branchId}`;
-    }
-
-    try {
-        do {
-            const url = baseUrl.replace(/page=\d+/, `page=${currentPage}`);
-            const response = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
-            });
-
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const data = await response.json();
-            const sales = data.data || [];
-            allSales.push(...sales);
-
-            lastPage = data.last_page || data.meta?.last_page || 1;
-            currentPage++;
-
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-        } while (currentPage <= lastPage);
-
-        console.log(`✅ ${allSales.length} ventas obtenidas para el día ${startDateTime}`);
-        setCached(cacheKey, allSales);
-        return allSales;
-
-    } catch (error) {
-        console.error('Error en fetchAllSalesForDay:', error);
-        return [];
-    }
-}
-
-// ==================== PROCESAR UN DÍA CON UNA SOLA CONSULTA ====================
-
-async function procesarDiaOptimizado(fechaDisplay, branchId) {
-    const range = getDateRangeForDay(fechaDisplay);
-    const startDateTime = range.start;
-    const endDateTime = range.end;
-
-    // UNA SOLA CONSULTA que trae TODAS las ventas del día (todos los sale_type)
-    const sales = await fetchAllSalesForDay(startDateTime, endDateTime, branchId);
-
-    // Estructuras para acumular datos por asesor
-    const asesorMap = new Map();
-
-    for (const sale of sales) {
-        const asesor = sale.user?.name || 'No disponible';
-        const saleType = sale.sale_type || 'products';
-        const isCredit = sale.is_credit === true || saleType === 'credit';
-        const isService = saleType === 'services';
-        const isProduct = saleType === 'products' && !isCredit;
-
-        if (!asesorMap.has(asesor)) {
-            asesorMap.set(asesor, {
-                asesor: asesor,
-                totalContado: 0,
-                comisiones: 0,
-                // Servicios
-                SERVINET_SUBS: 0,
-                SERVINET_SUBS_CANT: 0,
-                SERVINET_POSPAGO: 0,
-                SERVINET_POSPAGO_CANT: 0,
-                SPAY_PAGOS: 0,
-                SPAY_PAGOS_CANT: 0,
-                PAYJOY_PAGOS: 0,
-                PAYJOY_PAGOS_CANT: 0,
-                CREDICEL_PAGOS: 0,
-                CREDICEL_PAGOS_CANT: 0,
-                // Créditos (enganches)
-                SPAY_ENGANCHE: 0,
-                PAYJOY_ENGANCHE: 0,
-                CREDICEL_ENGANCHE: 0,
-                PAGUITOS_ENGANCHE: 0
-            });
-        }
-
-        const data = asesorMap.get(asesor);
-
-        // Procesar según tipo de venta
-        if (isProduct) {
-            // Venta de productos (contado)
-            let totalVenta = 0;
-            for (const detail of (sale.details || [])) {
-                totalVenta += parseFloat(detail.total_amount) || parseFloat(detail.total) || 0;
-            }
-            data.totalContado += totalVenta;
-        }
-
-        if (isService) {
-            // Servicios
-            data.comisiones += parseFloat(sale.service_fee) || 0;
-            for (const detail of (sale.details || [])) {
-                const totalAmount = parseFloat(detail.total_amount) || parseFloat(detail.total) || 0;
-                const productId = detail.product_id;
-                const quantity = detail.quantity || 1;
-
-                if (CONCEPTOS_CONFIG.SERVINET_SUBS.ids.includes(productId)) {
-                    data.SERVINET_SUBS += totalAmount;
-                    data.SERVINET_SUBS_CANT += quantity;
-                }
-                if (CONCEPTOS_CONFIG.SERVINET_POSPAGO.ids.includes(productId)) {
-                    data.SERVINET_POSPAGO += totalAmount;
-                    data.SERVINET_POSPAGO_CANT += quantity;
-                }
-                if (CONCEPTOS_CONFIG.SPAY_PAGOS.ids.includes(productId)) {
-                    data.SPAY_PAGOS += totalAmount;
-                    data.SPAY_PAGOS_CANT += quantity;
-                }
-                if (CONCEPTOS_CONFIG.PAYJOY_PAGOS.ids.includes(productId)) {
-                    data.PAYJOY_PAGOS += totalAmount;
-                    data.PAYJOY_PAGOS_CANT += quantity;
-                }
-                if (CONCEPTOS_CONFIG.CREDICEL_PAGOS.ids.includes(productId)) {
-                    data.CREDICEL_PAGOS += totalAmount;
-                    data.CREDICEL_PAGOS_CANT += quantity;
-                }
-            }
-        }
-
-        if (isCredit) {
-            // Créditos (enganches)
-            const creditProviderId = sale.credit_provider?.id;
-            let totalEnganche = 0;
-            for (const detail of (sale.details || [])) {
-                if (detail.payment_type === 'Enganche') {
-                    totalEnganche += parseFloat(detail.total_amount) || parseFloat(detail.total) || 0;
-                }
-            }
-            if (totalEnganche > 0) {
-                if (creditProviderId === 1) data.SPAY_ENGANCHE += totalEnganche;
-                else if (creditProviderId === 2) data.PAYJOY_ENGANCHE += totalEnganche;
-                else if (creditProviderId === 3) data.CREDICEL_ENGANCHE += totalEnganche;
-                else if (creditProviderId === 7) data.PAGUITOS_ENGANCHE += totalEnganche;
-            }
-        }
-    }
-
-    // Convertir el mapa a array de resultados
-    const resultados = [];
-    for (const [asesor, data] of asesorMap) {
-        resultados.push({
-            asesor: asesor,
-            fecha: fechaDisplay,
-            totalContado: data.totalContado,
-            SERVINET_SUBS: data.SERVINET_SUBS,
-            SERVINET_SUBS_CANT: data.SERVINET_SUBS_CANT,
-            SERVINET_POSPAGO: data.SERVINET_POSPAGO,
-            SERVINET_POSPAGO_CANT: data.SERVINET_POSPAGO_CANT,
-            SPAY_ENGANCHE: data.SPAY_ENGANCHE,
-            SPAY_PAGOS: data.SPAY_PAGOS,
-            SPAY_PAGOS_CANT: data.SPAY_PAGOS_CANT,
-            PAYJOY_ENGANCHE: data.PAYJOY_ENGANCHE,
-            PAYJOY_PAGOS: data.PAYJOY_PAGOS,
-            PAYJOY_PAGOS_CANT: data.PAYJOY_PAGOS_CANT,
-            CREDICEL_ENGANCHE: data.CREDICEL_ENGANCHE,
-            CREDICEL_PAGOS: data.CREDICEL_PAGOS,
-            CREDICEL_PAGOS_CANT: data.CREDICEL_PAGOS_CANT,
-            PAGUITOS_ENGANCHE: data.PAGUITOS_ENGANCHE,
-            comisiones: data.comisiones
-        });
-    }
-
-    return resultados;
-}
-
-// ==================== FUNCIONES AUXILIARES ====================
-
-// Cargar sucursales
+// Función para cargar sucursales
 async function loadIngresosBranches() {
     const branchSelect = document.getElementById('ingresosBranchSelect');
     if (!branchSelect) return;
@@ -287,6 +102,201 @@ function getDateRangeForDay(dateStr) {
     return { start: startStr, end: endStr };
 }
 
+// Función optimizada: Consulta TODOS los servicios de un día (sin filtrar por producto)
+async function fetchAllServices(startDateTime, endDateTime, branchId) {
+    const cacheKey = `services_${startDateTime}_${endDateTime}_${branchId}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+    
+    let url = `${CONFIG.API_SALES}?page=1&per_page=100&total=0&sale_type=services&start_date=${startDateTime}&end_date=${endDateTime}`;
+    
+    if (branchId && branchId !== '') {
+        url += `&branch_ids[]=${branchId}`;
+    }
+    
+    try {
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const data = await response.json();
+        const sales = data.data || [];
+        
+        // Procesar y agrupar por asesor inmediatamente
+        const result = new Map();
+        
+        for (const sale of sales) {
+            const asesor = sale.user?.name || 'No disponible';
+            const serviceFee = parseFloat(sale.service_fee) || 0;
+            
+            if (!result.has(asesor)) {
+                result.set(asesor, {
+                    asesor: asesor,
+                    comisiones: 0,
+                    servicios: {
+                        SERVINET_SUBS: 0, SERVINET_SUBS_CANT: 0,
+                        SERVINET_POSPAGO: 0, SERVINET_POSPAGO_CANT: 0,
+                        SPAY_PAGOS: 0, SPAY_PAGOS_CANT: 0,
+                        PAYJOY_PAGOS: 0, PAYJOY_PAGOS_CANT: 0,
+                        CREDICEL_PAGOS: 0, CREDICEL_PAGOS_CANT: 0
+                    }
+                });
+            }
+            
+            const asesorData = result.get(asesor);
+            asesorData.comisiones += serviceFee;
+            
+            for (const detail of (sale.details || [])) {
+                const totalAmount = parseFloat(detail.total_amount) || parseFloat(detail.total) || 0;
+                const productId = detail.product_id;
+                const quantity = detail.quantity || 1;
+                
+                if (CONCEPTOS_CONFIG.SERVINET_SUBS.ids.includes(productId)) {
+                    asesorData.servicios.SERVINET_SUBS += totalAmount;
+                    asesorData.servicios.SERVINET_SUBS_CANT += quantity;
+                }
+                if (CONCEPTOS_CONFIG.SERVINET_POSPAGO.ids.includes(productId)) {
+                    asesorData.servicios.SERVINET_POSPAGO += totalAmount;
+                    asesorData.servicios.SERVINET_POSPAGO_CANT += quantity;
+                }
+                if (CONCEPTOS_CONFIG.SPAY_PAGOS.ids.includes(productId)) {
+                    asesorData.servicios.SPAY_PAGOS += totalAmount;
+                    asesorData.servicios.SPAY_PAGOS_CANT += quantity;
+                }
+                if (CONCEPTOS_CONFIG.PAYJOY_PAGOS.ids.includes(productId)) {
+                    asesorData.servicios.PAYJOY_PAGOS += totalAmount;
+                    asesorData.servicios.PAYJOY_PAGOS_CANT += quantity;
+                }
+                if (CONCEPTOS_CONFIG.CREDICEL_PAGOS.ids.includes(productId)) {
+                    asesorData.servicios.CREDICEL_PAGOS += totalAmount;
+                    asesorData.servicios.CREDICEL_PAGOS_CANT += quantity;
+                }
+            }
+        }
+        
+        setCached(cacheKey, result);
+        return result;
+        
+    } catch (error) {
+        console.error('Error en fetchAllServices:', error);
+        return new Map();
+    }
+}
+
+// Función optimizada: Consulta TODOS los créditos de un día (todos los proveedores)
+async function fetchAllCredits(startDateTime, endDateTime, branchId) {
+    const cacheKey = `credits_${startDateTime}_${endDateTime}_${branchId}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+    
+    let url = `${CONFIG.API_SALES}?page=1&per_page=100&total=0&sale_type=credit&start_date=${startDateTime}&end_date=${endDateTime}`;
+    
+    if (branchId && branchId !== '') {
+        url += `&branch_ids[]=${branchId}`;
+    }
+    
+    try {
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const data = await response.json();
+        const sales = data.data || [];
+        
+        // Procesar y agrupar por asesor inmediatamente
+        const result = new Map();
+        
+        for (const sale of sales) {
+            const asesor = sale.user?.name || 'No disponible';
+            const creditProviderId = sale.credit_provider?.id;
+            
+            if (!result.has(asesor)) {
+                result.set(asesor, {
+                    asesor: asesor,
+                    creditos: {
+                        SPAY_ENGANCHE: 0,
+                        PAYJOY_ENGANCHE: 0,
+                        CREDICEL_ENGANCHE: 0,
+                        PAGUITOS_ENGANCHE: 0
+                    }
+                });
+            }
+            
+            let totalEnganche = 0;
+            for (const detail of (sale.details || [])) {
+                if (detail.payment_type === 'Enganche') {
+                    totalEnganche += parseFloat(detail.total_amount) || parseFloat(detail.total) || 0;
+                }
+            }
+            
+            if (totalEnganche > 0) {
+                const asesorData = result.get(asesor);
+                if (creditProviderId === 1) asesorData.creditos.SPAY_ENGANCHE += totalEnganche;
+                else if (creditProviderId === 2) asesorData.creditos.PAYJOY_ENGANCHE += totalEnganche;
+                else if (creditProviderId === 3) asesorData.creditos.CREDICEL_ENGANCHE += totalEnganche;
+                else if (creditProviderId === 7) asesorData.creditos.PAGUITOS_ENGANCHE += totalEnganche;
+            }
+        }
+        
+        setCached(cacheKey, result);
+        return result;
+        
+    } catch (error) {
+        console.error('Error en fetchAllCredits:', error);
+        return new Map();
+    }
+}
+
+// Función optimizada: Consulta ventas de contado por asesor
+async function fetchContadoPorAsesor(startDateTime, endDateTime, branchId) {
+    const cacheKey = `contado_${startDateTime}_${endDateTime}_${branchId}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+    
+    let url = `${CONFIG.API_SALES}?page=1&per_page=100&total=0&sale_type=products&start_date=${startDateTime}&end_date=${endDateTime}`;
+    
+    if (branchId && branchId !== '') {
+        url += `&branch_ids[]=${branchId}`;
+    }
+    
+    try {
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const data = await response.json();
+        const sales = data.data || [];
+        
+        const totalPorAsesor = new Map();
+        
+        for (const sale of sales) {
+            const asesor = sale.user?.name || 'No disponible';
+            let totalVenta = 0;
+            
+            for (const detail of (sale.details || [])) {
+                totalVenta += parseFloat(detail.total_amount) || parseFloat(detail.total) || 0;
+            }
+            
+            if (totalVenta > 0) {
+                totalPorAsesor.set(asesor, (totalPorAsesor.get(asesor) || 0) + totalVenta);
+            }
+        }
+        
+        setCached(cacheKey, totalPorAsesor);
+        return totalPorAsesor;
+        
+    } catch (error) {
+        console.error('Error en fetchContadoPorAsesor:', error);
+        return new Map();
+    }
+}
+
 // Función para generar lista de fechas entre dos fechas
 function getDatesBetween(startDateStr, endDateStr) {
     const dates = [];
@@ -325,8 +335,56 @@ function formatDateDisplay(dateStr) {
     return dateStr;
 }
 
-// ==================== FUNCIÓN PRINCIPAL searchIngresos ====================
+// Función para procesar un día (ahora con solo 3 consultas)
+async function procesarDiaOptimizado(fechaDisplay, branchId) {
+    const range = getDateRangeForDay(fechaDisplay);
+    
+    // Solo 3 consultas en paralelo en lugar de 6
+    const [serviciosPorAsesor, creditosPorAsesor, contadoPorAsesor] = await Promise.all([
+        fetchAllServices(range.start, range.end, branchId),
+        fetchAllCredits(range.start, range.end, branchId),
+        fetchContadoPorAsesor(range.start, range.end, branchId)
+    ]);
+    
+    // Combinar todos los asesores únicos
+    const allAsesores = new Set();
+    for (const [asesor] of serviciosPorAsesor) allAsesores.add(asesor);
+    for (const [asesor] of creditosPorAsesor) allAsesores.add(asesor);
+    for (const [asesor] of contadoPorAsesor) allAsesores.add(asesor);
+    
+    const resultados = [];
+    
+    for (const asesor of allAsesores) {
+        const servicios = serviciosPorAsesor.get(asesor) || { servicios: {}, comisiones: 0 };
+        const creditos = creditosPorAsesor.get(asesor) || { creditos: {} };
+        const totalContado = contadoPorAsesor.get(asesor) || 0;
+        
+        resultados.push({
+            asesor: asesor,
+            fecha: fechaDisplay,
+            totalContado: totalContado,
+            SERVINET_SUBS: servicios.servicios?.SERVINET_SUBS || 0,
+            SERVINET_SUBS_CANT: servicios.servicios?.SERVINET_SUBS_CANT || 0,
+            SERVINET_POSPAGO: servicios.servicios?.SERVINET_POSPAGO || 0,
+            SERVINET_POSPAGO_CANT: servicios.servicios?.SERVINET_POSPAGO_CANT || 0,
+            SPAY_ENGANCHE: creditos.creditos?.SPAY_ENGANCHE || 0,
+            SPAY_PAGOS: servicios.servicios?.SPAY_PAGOS || 0,
+            SPAY_PAGOS_CANT: servicios.servicios?.SPAY_PAGOS_CANT || 0,
+            PAYJOY_ENGANCHE: creditos.creditos?.PAYJOY_ENGANCHE || 0,
+            PAYJOY_PAGOS: servicios.servicios?.PAYJOY_PAGOS || 0,
+            PAYJOY_PAGOS_CANT: servicios.servicios?.PAYJOY_PAGOS_CANT || 0,
+            CREDICEL_ENGANCHE: creditos.creditos?.CREDICEL_ENGANCHE || 0,
+            CREDICEL_PAGOS: servicios.servicios?.CREDICEL_PAGOS || 0,
+            CREDICEL_PAGOS_CANT: servicios.servicios?.CREDICEL_PAGOS_CANT || 0,
+            PAGUITOS_ENGANCHE: creditos.creditos?.PAGUITOS_ENGANCHE || 0,
+            comisiones: servicios.comisiones || 0
+        });
+    }
+    
+    return resultados;
+}
 
+// Función principal searchIngresos
 async function searchIngresos() {
     const startDate = document.getElementById('ingresosStartDate').value;
     const endDate = document.getElementById('ingresosEndDate').value;
@@ -354,7 +412,7 @@ async function searchIngresos() {
     document.getElementById('ingresosInfoAlert').style.display = 'none';
     
     try {
-        // Procesar días en paralelo (cada día ahora hace UNA consulta)
+        // Procesar días en paralelo (máximo 4 días)
         const promises = fechas.map(fecha => procesarDiaOptimizado(fecha, branchId));
         const resultadosPorDia = await Promise.all(promises);
         
@@ -399,6 +457,9 @@ async function searchIngresos() {
         const sucursalNombre = document.getElementById('ingresosBranchSelect').options[document.getElementById('ingresosBranchSelect').selectedIndex]?.text || 'Sucursal seleccionada';
         
         cachedIngresosData = { datosTabla, totales, startDate, endDate, branchId, diffDays, sucursalNombre };
+        
+        // Resto del código de renderizado (statsHtml, tableHtml, etc.) igual que antes...
+        // [Mantén el mismo código de renderizado que ya tenías]
         
         // Tarjetas de estadísticas
         const statsHtml = `
@@ -476,7 +537,7 @@ async function searchIngresos() {
             const rowspan = j - i;
             
             if (!isFirstAsesor) {
-                tableHtml += `<tr class="asesor-separator"><td colspan="13" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</td></tr>`;
+                tableHtml += `<tr class="asesor-separator"><td colspan="13" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</div></tr>`;
             }
             
             for (let k = i; k < j; k++) {
@@ -552,8 +613,7 @@ async function searchIngresos() {
     }
 }
 
-// ==================== FUNCIONES DE FORMATO ====================
-
+// Funciones auxiliares de formato
 function formatServiceCell(monto, cantidad) {
     if (monto === 0 && cantidad === 0) return '<span style="color: #94a3b8;">$0</span>';
     const montoFormateado = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(monto);
@@ -565,8 +625,7 @@ function formatCreditCell(monto) {
     return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(monto);
 }
 
-// ==================== EXPORTAR A EXCEL ====================
-
+// Función para exportar a Excel
 function exportIngresosToExcel() {
     if (!cachedIngresosData) {
         showError('ingresos', 'Primero consulte los datos');
@@ -629,8 +688,7 @@ function exportIngresosToExcel() {
     }
 }
 
-// ==================== MODALES DE DETALLE ====================
-
+// Funciones de modales (openIngresosModal) - mantener igual que antes
 function openIngresosModal(tipo) {
     if (!cachedIngresosData) {
         showError('ingresos', 'Primero consulte los datos');
@@ -663,7 +721,7 @@ function openIngresosModal(tipo) {
         let isFirstAsesor = true;
         for (const [asesor, registros] of asesoresMap) {
             if (!isFirstAsesor) {
-                tableHtml += `<tr class="asesor-separator-modal"><td colspan="3" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</td></tr>`;
+                tableHtml += `<tr class="asesor-separator-modal"><td colspan="3" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</div><tr>`;
             }
             isFirstAsesor = false;
             
@@ -671,16 +729,17 @@ function openIngresosModal(tipo) {
             for (let i = 0; i < sorted.length; i++) {
                 tableHtml += `<tr>`;
                 if (i === 0) {
-                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</td>`;
+                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</div>`;
                 }
                 tableHtml += `
-                    <td style="text-align: center;">${formatDateDisplay(sorted[i].fecha)}</td>
-                    <td style="text-align: right; color: #3b82f6;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(sorted[i].monto)}</td>
+                    <td style="text-align: center;">${formatDateDisplay(sorted[i].fecha)}</div>
+                    <td style="text-align: right; color: #3b82f6;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(sorted[i].monto)}</div>
                 </tr>`;
             }
         }
-        tableHtml += `</tbody></table></div>`;
+        tableHtml += `</tbody>}</div>`;
     }
+    // ... (mantener el resto de los casos: servinet, spay, payjoy, credicel, paguitos, comisiones igual que antes)
     else if (tipo === 'servinet') {
         title = '💰 SERVINET - Desglose por Asesor y Día';
         const asesoresMap = new Map();
@@ -709,7 +768,7 @@ function openIngresosModal(tipo) {
         let isFirstAsesor = true;
         for (const [asesor, registros] of asesoresMap) {
             if (!isFirstAsesor) {
-                tableHtml += `<tr class="asesor-separator-modal"><td colspan="7" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</td></tr>`;
+                tableHtml += `<tr class="asesor-separator-modal"><td colspan="7" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</div></tr>`;
             }
             isFirstAsesor = false;
             
@@ -718,18 +777,18 @@ function openIngresosModal(tipo) {
                 const r = sorted[i];
                 tableHtml += `<tr>`;
                 if (i === 0) {
-                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</td>`;
+                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</div>`;
                 }
                 tableHtml += `
-                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</td>
-                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.subs)}</td>
-                    <td style="text-align: center;">${r.subsCant}</td>
-                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.pospago)}</td>
-                    <td style="text-align: center;">${r.pospagoCant}</td>
+                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</div>
+                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.subs)}</div>
+                    <td style="text-align: center;">${r.subsCant}</div>
+                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.pospago)}</div>
+                    <td style="text-align: center;">${r.pospagoCant}</div>
                 </tr>`;
             }
         }
-        tableHtml += `</tbody></table></div>`;
+        tableHtml += `</tbody>}</div>`;
     }
     else if (tipo === 'spay') {
         title = '💳 SPAY - Desglose por Asesor y Día';
@@ -760,7 +819,7 @@ function openIngresosModal(tipo) {
         let isFirstAsesor = true;
         for (const [asesor, registros] of asesoresMap) {
             if (!isFirstAsesor) {
-                tableHtml += `<tr class="asesor-separator-modal"><td colspan="6" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</td></tr>`;
+                tableHtml += `<tr class="asesor-separator-modal"><td colspan="6" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</div></table>`;
             }
             isFirstAsesor = false;
             
@@ -769,17 +828,17 @@ function openIngresosModal(tipo) {
                 const r = sorted[i];
                 tableHtml += `<tr>`;
                 if (i === 0) {
-                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</td>`;
+                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</div>`;
                 }
                 tableHtml += `
-                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</td>
-                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.enganche)}</td>
-                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.pagos)}</td>
-                    <td style="text-align: center;">${r.pagosCant}</td>
+                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</div>
+                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.enganche)}</div>
+                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.pagos)}</div>
+                    <td style="text-align: center;">${r.pagosCant}</div>
                 </tr>`;
             }
         }
-        tableHtml += `</tbody></table></div>`;
+        tableHtml += `</tbody>}</div>`;
     }
     else if (tipo === 'payjoy') {
         title = '💰 PAYJOY - Desglose por Asesor y Día';
@@ -810,7 +869,7 @@ function openIngresosModal(tipo) {
         let isFirstAsesor = true;
         for (const [asesor, registros] of asesoresMap) {
             if (!isFirstAsesor) {
-                tableHtml += `<tr class="asesor-separator-modal"><td colspan="6" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</td></tr>`;
+                tableHtml += `<tr class="asesor-separator-modal"><td colspan="6" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</div></tr>`;
             }
             isFirstAsesor = false;
             
@@ -819,17 +878,17 @@ function openIngresosModal(tipo) {
                 const r = sorted[i];
                 tableHtml += `<tr>`;
                 if (i === 0) {
-                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</td>`;
+                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</div>`;
                 }
                 tableHtml += `
-                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</td>
-                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.enganche)}</td>
-                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.pagos)}</td>
-                    <td style="text-align: center;">${r.pagosCant}</td>
+                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</div>
+                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.enganche)}</div>
+                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.pagos)}</div>
+                    <td style="text-align: center;">${r.pagosCant}</div>
                 </tr>`;
             }
         }
-        tableHtml += `</tbody></table></div>`;
+        tableHtml += `</tbody>}</div>`;
     }
     else if (tipo === 'credicel') {
         title = '💳 CREDICEL - Desglose por Asesor y Día';
@@ -860,7 +919,7 @@ function openIngresosModal(tipo) {
         let isFirstAsesor = true;
         for (const [asesor, registros] of asesoresMap) {
             if (!isFirstAsesor) {
-                tableHtml += `<tr class="asesor-separator-modal"><td colspan="6" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</td></tr>`;
+                tableHtml += `<tr class="asesor-separator-modal"><td colspan="6" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</div></tr>`;
             }
             isFirstAsesor = false;
             
@@ -869,17 +928,17 @@ function openIngresosModal(tipo) {
                 const r = sorted[i];
                 tableHtml += `<tr>`;
                 if (i === 0) {
-                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</td>`;
+                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</div>`;
                 }
                 tableHtml += `
-                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</td>
-                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.enganche)}</td>
-                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.pagos)}</td>
-                    <td style="text-align: center;">${r.pagosCant}</td>
+                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</div>
+                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.enganche)}</div>
+                    <td style="text-align: right;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.pagos)}</div>
+                    <td style="text-align: center;">${r.pagosCant}</div>
                 </tr>`;
             }
         }
-        tableHtml += `</tbody></table></div>`;
+        tableHtml += `</tbody>}</div>`;
     }
     else if (tipo === 'paguitos') {
         title = '💳 PAGUITOS - Desglose por Asesor y Día';
@@ -902,7 +961,7 @@ function openIngresosModal(tipo) {
         let isFirstAsesor = true;
         for (const [asesor, registros] of asesoresMap) {
             if (!isFirstAsesor) {
-                tableHtml += `<tr class="asesor-separator-modal"><td colspan="3" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</td></tr>`;
+                tableHtml += `<tr class="asesor-separator-modal"><td colspan="3" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</div></tr>`;
             }
             isFirstAsesor = false;
             
@@ -911,15 +970,15 @@ function openIngresosModal(tipo) {
                 const r = sorted[i];
                 tableHtml += `<tr>`;
                 if (i === 0) {
-                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</td>`;
+                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</div>`;
                 }
                 tableHtml += `
-                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</td>
-                    <td style="text-align: right; color: #f59e0b;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.enganche)}</td>
+                    <td style="text-align: center;">${formatDateDisplay(r.fecha)}</div>
+                    <td style="text-align: right; color: #f59e0b;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(r.enganche)}</div>
                 </tr>`;
             }
         }
-        tableHtml += `</tbody></table></div>`;
+        tableHtml += `</tbody>}</div>`;
     }
     else if (tipo === 'comisiones') {
         title = '💸 COMISIONES - Desglose por Asesor y Día';
@@ -942,7 +1001,7 @@ function openIngresosModal(tipo) {
         let isFirstAsesor = true;
         for (const [asesor, registros] of asesoresMap) {
             if (!isFirstAsesor) {
-                tableHtml += `<tr class="asesor-separator-modal"><td colspan="3" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</td></tr>`;
+                tableHtml += `<tr class="asesor-separator-modal"><td colspan="3" style="padding: 4px; background-color: #e8f4f8; border-top: 3px solid #1e40af;">&nbsp;</div></tr>`;
             }
             isFirstAsesor = false;
             
@@ -950,15 +1009,15 @@ function openIngresosModal(tipo) {
             for (let i = 0; i < sorted.length; i++) {
                 tableHtml += `<tr>`;
                 if (i === 0) {
-                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</td>`;
+                    tableHtml += `<td style="text-align: left; font-weight: 500;" rowspan="${sorted.length}">${escapeHtml(asesor)}</div>`;
                 }
                 tableHtml += `
-                    <td style="text-align: center;">${formatDateDisplay(sorted[i].fecha)}</td>
-                    <td style="text-align: right; color: #ea580c;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(sorted[i].comisiones)}</td>
+                    <td style="text-align: center;">${formatDateDisplay(sorted[i].fecha)}</div>
+                    <td style="text-align: right; color: #ea580c;">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(sorted[i].comisiones)}</div>
                 </tr>`;
             }
         }
-        tableHtml += `</tbody></table></div>`;
+        tableHtml += `</tbody>}</div>`;
     }
     
     let modal = document.getElementById('ingresosDetalleModal');
@@ -973,7 +1032,6 @@ function openIngresosModal(tipo) {
                     <span class="close-modal">&times;</span>
                 </div>
                 <div class="modal-body" id="ingresosModalBody"></div>
-                <div class="modal-footer">Ingresos - Desglose detallado</div>
             </div>
         `;
         document.body.appendChild(modal);
@@ -985,9 +1043,3 @@ function openIngresosModal(tipo) {
     document.getElementById('ingresosModalBody').innerHTML = tableHtml;
     modal.style.display = 'block';
 }
-
-// ==================== EXPORTAR FUNCIONES GLOBALES ====================
-window.loadIngresosBranches = loadIngresosBranches;
-window.searchIngresos = searchIngresos;
-window.exportIngresosToExcel = exportIngresosToExcel;
-window.openIngresosModal = openIngresosModal;
