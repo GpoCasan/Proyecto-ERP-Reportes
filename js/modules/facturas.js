@@ -524,35 +524,76 @@ async function checkConversionStatus() {
     const convertBtn = document.getElementById('facturasConvertBtn');
     const downloadLink = document.getElementById('facturasDownloadLink');
     const continueBtn = document.getElementById('facturasContinueToProcessorBtn');
+    const errorDiv = document.getElementById('facturasPdfError');
+
+    // Verificar que los elementos existan
+    console.log('🔍 Verificando elementos:', {
+        loader: !!loader,
+        convertBtn: !!convertBtn,
+        downloadLink: !!downloadLink,
+        continueBtn: !!continueBtn,
+        errorDiv: !!errorDiv
+    });
 
     try {
         const response = await fetch(`https://api.convertio.co/convert/${conversionId}/status`);
         const data = await response.json();
 
+        console.log('📊 Estado de conversión:', data);
+
         if (data.status === 'error') {
-            throw new Error(data.error);
+            throw new Error(data.error || 'Error en la conversión');
         }
 
-        if (data.data.step === 'finish') {
+        if (data.data && data.data.step === 'finish') {
             console.log('✅ Conversión completada!');
-            loader.style.display = 'none';
-            downloadLink.href = data.data.output.url;
-            downloadLink.download = 'converted.csv';
-            downloadLink.style.display = 'block';
-            continueBtn.style.display = 'block';
             
-            showInfo('facturas', '✅ PDF convertido correctamente. Haz clic en "Continuar al Procesador CSV" para continuar.');
+            // Ocultar loader
+            if (loader) loader.style.display = 'none';
+            
+            // Configurar y mostrar el enlace de descarga
+            if (downloadLink) {
+                console.log('📥 URL de descarga:', data.data.output.url);
+                downloadLink.href = data.data.output.url;
+                downloadLink.download = 'converted.csv';
+                downloadLink.classList.remove('hidden');
+                downloadLink.style.display = 'block';
+                downloadLink.textContent = '📥 Descargar CSV';
+                console.log('✅ Botón de descarga habilitado');
+            } else {
+                console.error('❌ No se encontró el elemento facturasDownloadLink');
+            }
+            
+            // Mostrar botón "Continuar"
+            if (continueBtn) {
+                continueBtn.classList.remove('hidden');
+                continueBtn.style.display = 'block';
+                console.log('✅ Botón "Continuar" habilitado');
+            }
+            
+            // Mostrar mensaje de éxito
+            if (errorDiv) {
+                errorDiv.textContent = '';
+                errorDiv.style.display = 'none';
+            }
+            
+            // Mostrar mensaje de éxito en la interfaz
+            showInfo('facturas', '✅ PDF convertido correctamente. Haz clic en "Descargar CSV" para guardar el archivo.');
+            
         } else {
-            console.log(`⏳ Progreso: ${data.data.step || 'procesando...'}`);
+            console.log(`⏳ Progreso: ${data.data?.step || 'procesando...'}`);
+            // Seguir verificando
             setTimeout(checkConversionStatus, 2000);
         }
 
     } catch (error) {
         console.error('❌ Error verificando estado:', error);
-        loader.style.display = 'none';
-        document.getElementById('facturasPdfError').textContent = `❌ Error: ${error.message}`;
-        document.getElementById('facturasPdfError').style.display = 'block';
-        convertBtn.disabled = false;
+        if (loader) loader.style.display = 'none';
+        if (errorDiv) {
+            errorDiv.textContent = `❌ Error: ${error.message}`;
+            errorDiv.style.display = 'block';
+        }
+        if (convertBtn) convertBtn.disabled = false;
     }
 }
 
