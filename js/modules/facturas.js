@@ -526,8 +526,8 @@ async function checkConversionStatus() {
     const continueBtn = document.getElementById('facturasContinueToProcessorBtn');
     const errorDiv = document.getElementById('facturasPdfError');
 
-    // Verificar que los elementos existan
-    console.log('🔍 Verificando elementos:', {
+    // Verificar que existan los elementos esenciales
+    console.log('🔍 Verificando elementos en checkConversionStatus:', {
         loader: !!loader,
         convertBtn: !!convertBtn,
         downloadLink: !!downloadLink,
@@ -545,44 +545,77 @@ async function checkConversionStatus() {
             throw new Error(data.error || 'Error en la conversión');
         }
 
+        // Si la conversión ha terminado
         if (data.data && data.data.step === 'finish') {
             console.log('✅ Conversión completada!');
-            
+
             // Ocultar loader
             if (loader) loader.style.display = 'none';
-            
-            // Configurar y mostrar el enlace de descarga
+
+            // Mostrar mensaje de éxito
+            showInfo('facturas', '✅ PDF convertido correctamente. Haz clic en "Descargar CSV" para guardar el archivo.');
+
+            // ---- Botón de descarga ----
             if (downloadLink) {
                 console.log('📥 URL de descarga:', data.data.output.url);
                 downloadLink.href = data.data.output.url;
                 downloadLink.download = 'converted.csv';
+                // Forzar visibilidad
+                downloadLink.style.display = 'inline-block';
+                downloadLink.style.visibility = 'visible';
                 downloadLink.classList.remove('hidden');
-                downloadLink.style.display = 'block';
                 downloadLink.textContent = '📥 Descargar CSV';
                 console.log('✅ Botón de descarga habilitado');
             } else {
                 console.error('❌ No se encontró el elemento facturasDownloadLink');
+                // Crear un enlace de descarga dinámico si no existe
+                const container = document.querySelector('.facturas-pdf-upload-area') || document.body;
+                const newLink = document.createElement('a');
+                newLink.id = 'facturasDownloadLink';
+                newLink.href = data.data.output.url;
+                newLink.download = 'converted.csv';
+                newLink.textContent = '📥 Descargar CSV';
+                newLink.style.cssText = 'display:inline-block; margin-top:10px; padding:10px 20px; background:#1e40af; color:white; border-radius:8px; text-decoration:none;';
+                container.appendChild(newLink);
+                console.log('✅ Enlace de descarga creado dinámicamente');
             }
-            
-            // Mostrar botón "Continuar"
+
+            // ---- Botón "Continuar" ----
             if (continueBtn) {
+                continueBtn.style.display = 'inline-block';
+                continueBtn.style.visibility = 'visible';
                 continueBtn.classList.remove('hidden');
-                continueBtn.style.display = 'block';
                 console.log('✅ Botón "Continuar" habilitado');
+            } else {
+                console.error('❌ No se encontró el elemento facturasContinueToProcessorBtn');
+                // Opcional: crear el botón dinámicamente
+                const container = document.querySelector('.facturas-pdf-upload-area') || document.body;
+                const newBtn = document.createElement('button');
+                newBtn.id = 'facturasContinueToProcessorBtn';
+                newBtn.className = 'btn-contado';
+                newBtn.textContent = '➡️ Continuar al Procesador CSV';
+                newBtn.style.cssText = 'display:inline-block; margin-top:10px; padding:10px 20px; background:#059669; color:white; border-radius:8px; border:none; cursor:pointer;';
+                newBtn.addEventListener('click', function() {
+                    console.log('➡️ Click en Continuar al Procesador CSV');
+                    switchToCSVProcessorTab();
+                });
+                container.appendChild(newBtn);
+                console.log('✅ Botón "Continuar" creado dinámicamente');
             }
-            
-            // Mostrar mensaje de éxito
+
+            // Ocultar mensaje de error si existía
             if (errorDiv) {
                 errorDiv.textContent = '';
                 errorDiv.style.display = 'none';
             }
-            
-            // Mostrar mensaje de éxito en la interfaz
-            showInfo('facturas', '✅ PDF convertido correctamente. Haz clic en "Descargar CSV" para guardar el archivo.');
-            
+
+            // Habilitar el botón de convertir nuevamente (por si quieren repetir)
+            if (convertBtn) convertBtn.disabled = false;
+
         } else {
+            // Aún en proceso
             console.log(`⏳ Progreso: ${data.data?.step || 'procesando...'}`);
-            // Seguir verificando
+            // Seguir verificando después de 2 segundos
             setTimeout(checkConversionStatus, 2000);
         }
 
