@@ -139,6 +139,11 @@
                 <div class="card-title">Top 15</div>
             </div>
             
+            <div class="nav-card" data-module="inventarioAccesorios">
+                <div class="card-icon">🔌</div>
+                <div class="card-title">Inventario Accesorios</div>
+            </div>
+
             <!-- MÓDULO: FACTURAS (PDF → CSV → EXCEL) - Solo visible para administrador -->
             <div class="nav-card" data-module="facturas">
                 <div class="card-icon">📄</div>
@@ -149,10 +154,12 @@
                 <div class="card-icon">🔄</div>
                 <div class="card-title">Transferencias Accesorios</div>
             </div>
+
             <div class="nav-card" data-module="inventario">
                 <div class="card-icon">📦</div>
                 <div class="card-title">Inventario Equipos</div>
             </div>
+
             <div class="nav-card" data-module="tae">
                 <div class="card-icon">📊</div>
                 <div class="card-title">TAE</div>
@@ -238,6 +245,37 @@
             </div>
         </div>
         
+        <!-- MÓDULO: INVENTARIO ACCESORIOS (classification_id=2) -->
+        <div id="inventarioAccesoriosModule" class="module">
+            <div class="card">
+                <div class="card-header">
+                    <h2>📦 Inventario de Accesorios</h2>
+                </div>
+                <div class="card-body">
+                    <div id="inventarioAccesoriosErrorAlert" class="alert alert-error"></div>
+                    <div id="inventarioAccesoriosInfoAlert" class="alert alert-info"></div>
+                    
+                    <div class="form-group">
+                        <label>🔍 Buscar accesorio (mínimo 3 caracteres):</label>
+                        <input type="text" id="accesorioSearchInput" placeholder="Escribe al menos 3 caracteres..." autocomplete="off" style="width: 100%;">
+                        <div id="accesoriosSuggestionsContainer" style="position: relative; width: 100%;"></div>
+                        <small style="color: #64748b; font-size: 0.7rem;">💡 Escribe al menos 3 caracteres - Se buscará automáticamente</small>
+                    </div>
+                    
+                    <div id="selectedAccesorioInfo" style="display: none; margin-top: 15px; padding: 12px; background: #f5f3ff; border-radius: 10px; border-left: 4px solid #7c3aed;">
+                        <strong>📱 Accesorio seleccionado:</strong> <span id="selectedAccesorioName"></span>
+                        <button id="clearAccesorioBtn" style="margin-left: 10px; padding: 4px 10px; font-size: 0.7rem; background: #dc2626; border: none; border-radius: 6px; color: white; cursor: pointer;">✖ Limpiar</button>
+                    </div>
+                    
+                    <button id="searchInventarioAccesoriosBtn" class="btn-tae" style="margin-top: 20px; width: 100%; padding: 12px;" disabled>
+                        🔍 Consultar Inventario
+                    </button>
+                    
+                    <div id="inventarioAccesoriosResults" style="display: none; margin-top: 20px;"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- MÓDULO: EXISTENCIAS (RANKING DE VENTAS) -->
         <div id="existenciasModule" class="module">
             <div class="card">
@@ -555,68 +593,68 @@
             </div>
         </div>
 
-<!-- MÓDULO: TAE APPS CREATIVAS -->
-<div id="tae_appsModule" class="module">
-    <div class="card">
-        <div class="card-header">
-            <h2>📱 TAE - APPS CREATIVAS</h2>
+        <!-- MÓDULO: TAE APPS CREATIVAS -->
+        <div id="tae_appsModule" class="module">
+            <div class="card">
+                <div class="card-header">
+                    <h2>📱 TAE - APPS CREATIVAS</h2>
+                </div>
+                <div class="card-body">
+                    <!-- Alertas -->
+                    <div id="taeAppsErrorAlert" class="alert alert-error"></div>
+                    <div id="taeAppsInfoAlert" class="alert alert-info"></div>
+                    <div id="taeAppsSuccessAlert" class="alert alert-success"></div>
+
+                    <!-- Filtros -->
+                    <div class="tae-apps-filters">
+                        <div class="filter-group">
+                            <label>📅 Fecha Inicio</label>
+                            <input type="date" id="taeAppsStartDate">
+                        </div>
+                        <div class="filter-group">
+                            <label>📅 Fecha Fin</label>
+                            <input type="date" id="taeAppsEndDate">
+                        </div>
+                        <div class="filter-group" style="justify-content:flex-end;">
+                            <button class="btn-consultar" id="taeAppsConsultarBtn">🔍 Consultar</button>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div id="taeAppsProgressContainer" class="progress-container hidden">
+                        <div class="progress-bar" id="taeAppsProgressBar"></div>
+                        <div class="progress-text" id="taeAppsProgressText">Cargando...</div>
+                    </div>
+
+                    <!-- Resultados -->
+                    <div id="taeAppsResults" class="hidden">
+                        <!-- Tarjetas de estadísticas -->
+                        <div class="tae-apps-stats-grid" id="taeAppsStatsContainer"></div>
+                        
+                        <!-- Título de la tabla -->
+                        <!-- <>div class="tae-apps-section-title">
+                            📍 Resumen por Sucursal y Línea <span class="count" id="taeAppsBranchCount">0</span>
+                        </div> -->
+                        
+                        <!-- Tabla principal -->
+                        <div class="table-container" id="taeAppsMainTable"></div>
+                        
+                        <!-- Botón de exportar a Excel -->
+                        <div id="taeAppsExportContainer" class="hidden" style="display: flex; justify-content: flex-end; margin-top: 20px;">
+                            <button id="taeAppsExportBtn" class="btn-export-excel" style="background: #059669; padding: 10px 24px; border-radius: 8px; color: white; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                                📊 Exportar a Excel
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Sin resultados -->
+                    <div id="taeAppsNoResults" class="hidden no-results">
+                        <div class="icon">📭</div>
+                        <p>No se encontraron ventas en el período seleccionado</p>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <!-- Alertas -->
-            <div id="taeAppsErrorAlert" class="alert alert-error"></div>
-            <div id="taeAppsInfoAlert" class="alert alert-info"></div>
-            <div id="taeAppsSuccessAlert" class="alert alert-success"></div>
-
-            <!-- Filtros -->
-            <div class="tae-apps-filters">
-                <div class="filter-group">
-                    <label>📅 Fecha Inicio</label>
-                    <input type="date" id="taeAppsStartDate">
-                </div>
-                <div class="filter-group">
-                    <label>📅 Fecha Fin</label>
-                    <input type="date" id="taeAppsEndDate">
-                </div>
-                <div class="filter-group" style="justify-content:flex-end;">
-                    <button class="btn-consultar" id="taeAppsConsultarBtn">🔍 Consultar</button>
-                </div>
-            </div>
-
-            <!-- Progress Bar -->
-            <div id="taeAppsProgressContainer" class="progress-container hidden">
-                <div class="progress-bar" id="taeAppsProgressBar"></div>
-                <div class="progress-text" id="taeAppsProgressText">Cargando...</div>
-            </div>
-
-            <!-- Resultados -->
-            <div id="taeAppsResults" class="hidden">
-                <!-- Tarjetas de estadísticas -->
-                <div class="tae-apps-stats-grid" id="taeAppsStatsContainer"></div>
-                
-                <!-- Título de la tabla -->
-                <!-- <>div class="tae-apps-section-title">
-                    📍 Resumen por Sucursal y Línea <span class="count" id="taeAppsBranchCount">0</span>
-                </div> -->
-                
-                <!-- Tabla principal -->
-                <div class="table-container" id="taeAppsMainTable"></div>
-                
-                <!-- Botón de exportar a Excel -->
-                <div id="taeAppsExportContainer" class="hidden" style="display: flex; justify-content: flex-end; margin-top: 20px;">
-                    <button id="taeAppsExportBtn" class="btn-export-excel" style="background: #059669; padding: 10px 24px; border-radius: 8px; color: white; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                        📊 Exportar a Excel
-                    </button>
-                </div>
-            </div>
-
-            <!-- Sin resultados -->
-            <div id="taeAppsNoResults" class="hidden no-results">
-                <div class="icon">📭</div>
-                <p>No se encontraron ventas en el período seleccionado</p>
-            </div>
-        </div>
-    </div>
-</div>
 
         <!-- MÓDULO: VENTAS TOTALES -->
         <div id="ventasTotalesModule" class="module">
@@ -879,6 +917,7 @@
                 </div>
             </div>
         </div>
+
         <!-- MÓDULO 9: COMPRAS POR PRODUCTO -->
         <div id="comprasModule" class="module">
             <div class="card">
@@ -918,21 +957,21 @@
                 </div>
             </div>
         </div>
-        <!-- MODAL PARA GRÁFICAS EXPANDIDAS -->
-        <div id="chartModal" class="modal" style="display: none;">
-            <div class="modal-content" style="max-width: 900px;">
-                <div class="modal-header">
-                    <h3 id="chartModalTitle">📊 Gráfica</h3>
-                    <span class="close-modal" onclick="closeChartModal()">&times;</span>
-                </div>
-                <div class="modal-body" id="chartModalBody" style="max-height: 70vh; overflow-y: auto;">
-                    <canvas id="modalChart" style="max-height: 500px; width: 100%;"></canvas>
-                </div>
-                <div class="modal-footer">
-                    <button onclick="closeChartModal()" style="padding: 6px 16px; cursor: pointer;">Cerrar</button>
+            <!-- MODAL PARA GRÁFICAS EXPANDIDAS -->
+            <div id="chartModal" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 900px;">
+                    <div class="modal-header">
+                        <h3 id="chartModalTitle">📊 Gráfica</h3>
+                        <span class="close-modal" onclick="closeChartModal()">&times;</span>
+                    </div>
+                    <div class="modal-body" id="chartModalBody" style="max-height: 70vh; overflow-y: auto;">
+                        <canvas id="modalChart" style="max-height: 500px; width: 100%;"></canvas>
+                    </div>
+                    <div class="modal-footer">
+                        <button onclick="closeChartModal()" style="padding: 6px 16px; cursor: pointer;">Cerrar</button>
+                    </div>
                 </div>
             </div>
-        </div>
 
         <!-- FOOTER -->
         <footer class="footer">
@@ -965,5 +1004,7 @@
     <script src="js/modules/analisis_margen.js"></script>
     <script src="js/alertas_transferencias.js"></script>
     <script src="js/modules/tae_inventario.js"></script>
+    <script src="js/modules/inventarioAccesorios.js"></script>
+
 </body>
 </html>
