@@ -17,10 +17,10 @@ const USERS = {
         showTaeBalance: false
     },
     "operaciones": {
-        password: "operaciones2026",
+        password: "ops2026",
         role: "operaciones",
         name: "Operaciones",
-        modules: ["inventario", "existencias", "transferencias", "compras","inventarioAccesorios"],
+        modules: ["contado", "inventario", "existencias", "transferencias", "compras","inventarioAccesorios", "facturas"],
         showTaeBalance: false
     },
     "ingresos": {

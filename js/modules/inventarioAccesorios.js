@@ -10,7 +10,7 @@ let searchTimeoutAccesorios = null;
 let currentAccesorioName = '';
 let currentStockData = [];
 
-// ==================== CONFIGURACIÓN DE RUTAS (con nombre único) ====================
+// ==================== CONFIGURACIÓN DE RUTAS ====================
 const RUTAS_ACCESORIOS_CONFIG = {
     "Ruta 1": {
         sucursales: ["Calkini", "Halacho", "Hecelchakan", "Hunucma", "Muna", "Tenabo", "Ticul 2", "Uman"],
@@ -101,7 +101,7 @@ function formatCurrency(value) {
     return '$' + parseFloat(value).toFixed(2);
 }
 
-// ==================== OBTENER COSTO DEL PRODUCTO (desde supply.gcasan.com) ====================
+// ==================== OBTENER COSTO DEL PRODUCTO ====================
 async function fetchProductCost(productId) {
     try {
         const url = `https://supply.gcasan.com/api/products/${productId}/cost`;
@@ -119,25 +119,20 @@ async function fetchProductCost(productId) {
         const data = await response.json();
         console.log(`💰 Costo obtenido:`, data);
         
-        // La respuesta tiene la estructura: { message: "...", data: { id, product_id, cost, ... } }
         if (data && data.data && data.data.cost !== undefined) {
             const costValue = parseFloat(data.data.cost);
             if (!isNaN(costValue) && costValue > 0) {
-                console.log(`✅ Costo encontrado: ${costValue}`);
                 return costValue;
             }
         }
         
-        // Fallback: buscar en la raíz si existe
         if (data && data.cost !== undefined) {
             const costValue = parseFloat(data.cost);
             if (!isNaN(costValue) && costValue > 0) {
-                console.log(`✅ Costo encontrado (raíz): ${costValue}`);
                 return costValue;
             }
         }
         
-        console.warn(`⚠️ No se encontró costo para el producto ${productId}`);
         return null;
         
     } catch (error) {
@@ -146,7 +141,7 @@ async function fetchProductCost(productId) {
     }
 }
 
-// ==================== OBTENER PRECIO DE VENTA (desde catalogs.gcasan.com) ====================
+// ==================== OBTENER PRECIO DE VENTA ====================
 async function fetchProductPrice(productId) {
     try {
         const url = `https://catalogs.gcasan.com/api/products/${productId}/price?per_page=-1&product_id=${productId}&price_type_id=1`;
@@ -164,9 +159,7 @@ async function fetchProductPrice(productId) {
         const data = await response.json();
         console.log(`💰 Precio obtenido:`, data);
         
-        // La respuesta tiene un array 'data' con objetos que contienen 'price'
         if (data && data.data && data.data.length > 0) {
-            // Buscar precio general (branch_id = null) o tomar el primero
             const priceItem = data.data.find(p => p.branch_id === null) || data.data[0];
             const price = parseFloat(priceItem.price);
             if (!isNaN(price) && price > 0) {
@@ -181,10 +174,9 @@ async function fetchProductPrice(productId) {
     }
 }
 
-// ==================== OBTENER VENTAS DEL MES ANTERIOR (desde reports.gcasan.com) ====================
+// ==================== OBTENER VENTAS DEL MES ANTERIOR ====================
 async function fetchPreviousMonthSales(productId) {
     try {
-        // Calcular el mes anterior
         const now = new Date();
         const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const startDate = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01 06:00:00`;
@@ -206,7 +198,6 @@ async function fetchPreviousMonthSales(productId) {
         const data = await response.json();
         console.log(`📊 Ventas mes anterior:`, data);
         
-        // Obtener el total_amount de la primera página
         if (data && data.total_amount !== undefined) {
             return parseFloat(data.total_amount) || 0;
         }
@@ -500,9 +491,7 @@ function getInventoryBySucursalAccesorios(stockItems, sucursalNombre) {
     
     return {
         quantity: item?.quantity || 0,
-        transfer_quantity: item?.transfer_quantity || 0,
-        total: (item?.quantity || 0) + (item?.transfer_quantity || 0),
-        hasStock: (item?.quantity || 0) > 0 || (item?.transfer_quantity || 0) > 0
+        hasStock: (item?.quantity || 0) > 0
     };
 }
 
@@ -514,22 +503,17 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
     
     let sucursalesData = [];
     let totalQuantity = 0;
-    let totalTransfer = 0;
     
     for (const sucursal of sucursales) {
         const inv = getInventoryBySucursalAccesorios(stockItems, sucursal);
         sucursalesData.push({
             nombre: sucursal,
             quantity: inv.quantity,
-            transfer: inv.transfer_quantity,
-            total: inv.total,
             hasStock: inv.hasStock
         });
         totalQuantity += inv.quantity;
-        totalTransfer += inv.transfer_quantity;
     }
     
-    const totalGeneral = totalQuantity + totalTransfer;
     const sinStockCount = sucursalesData.filter(s => !s.hasStock).length;
     
     return `
@@ -544,8 +528,6 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
                     </div>
                     <div style="display: flex; gap: 15px; font-size: 0.75rem;">
                         <span>📦 ${totalQuantity}</span>
-                        <span>🚚 ${totalTransfer}</span>
-                        <span style="font-weight: bold;">📊 ${totalGeneral}</span>
                     </div>
                 </div>
             </div>
@@ -555,9 +537,7 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
                         <tr>
                             <th style="padding: 10px; text-align: left;">#</th>
                             <th style="padding: 10px; text-align: left;">Sucursal</th>
-                            <th style="padding: 10px; text-align: center; width: 70px;">📦</th>
-                            <th style="padding: 10px; text-align: center; width: 70px;">🚚</th>
-                            <th style="padding: 10px; text-align: center; width: 70px;">📊</th>
+                            <th style="padding: 10px; text-align: center; width: 90px;">📦 Cantidad</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -568,9 +548,7 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
                                     🏪 ${escapeHtml(suc.nombre)}
                                     ${!suc.hasStock ? '<span style="margin-left: 8px; font-size: 0.65rem; color: #dc2626;">⚠️ SIN STOCK</span>' : ''}
                                 </td>
-                                <td style="padding: 10px; text-align: center; color: #059669; font-weight: bold;">${suc.quantity}</td>
-                                <td style="padding: 10px; text-align: center; color: #f97316; font-weight: bold;">${suc.transfer}</td>
-                                <td style="padding: 10px; text-align: center; font-weight: bold; background: #f0f9ff;">${suc.total}</td>
+                                <td style="padding: 10px; text-align: center; font-weight: bold; color: #059669;">${suc.quantity}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -578,8 +556,6 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
                         <tr style="font-weight: bold;">
                             <td colspan="2" style="padding: 10px; text-align: right;">TOTAL ${rutaNombre}:</td>
                             <td style="padding: 10px; text-align: center; color: #059669;">${totalQuantity}</td>
-                            <td style="padding: 10px; text-align: center; color: #f97316;">${totalTransfer}</td>
-                            <td style="padding: 10px; text-align: center; background: #e8f4f8;">${totalGeneral}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -592,14 +568,11 @@ function renderSinRutaTabAccesorios(sucursalesData) {
     if (sucursalesData.length === 0) return '';
     
     let totalQuantity = 0;
-    let totalTransfer = 0;
     
     for (const suc of sucursalesData) {
         totalQuantity += suc.quantity;
-        totalTransfer += suc.transfer;
     }
     
-    const totalGeneral = totalQuantity + totalTransfer;
     const sinStockCount = sucursalesData.filter(s => !s.hasStock).length;
     
     return `
@@ -614,8 +587,6 @@ function renderSinRutaTabAccesorios(sucursalesData) {
                     </div>
                     <div style="display: flex; gap: 15px; font-size: 0.75rem;">
                         <span>📦 ${totalQuantity}</span>
-                        <span>🚚 ${totalTransfer}</span>
-                        <span style="font-weight: bold;">📊 ${totalGeneral}</span>
                     </div>
                 </div>
             </div>
@@ -625,9 +596,7 @@ function renderSinRutaTabAccesorios(sucursalesData) {
                         <tr>
                             <th style="padding: 10px; text-align: left;">#</th>
                             <th style="padding: 10px; text-align: left;">Sucursal</th>
-                            <th style="padding: 10px; text-align: center; width: 70px;">📦</th>
-                            <th style="padding: 10px; text-align: center; width: 70px;">🚚</th>
-                            <th style="padding: 10px; text-align: center; width: 70px;">📊</th>
+                            <th style="padding: 10px; text-align: center; width: 90px;">📦 Cantidad</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -638,9 +607,7 @@ function renderSinRutaTabAccesorios(sucursalesData) {
                                     🏪 ${escapeHtml(suc.nombre)}
                                     ${!suc.hasStock ? '<span style="margin-left: 8px; font-size: 0.65rem; color: #dc2626;">⚠️ SIN STOCK</span>' : ''}
                                 </td>
-                                <td style="padding: 10px; text-align: center; color: #059669; font-weight: bold;">${suc.quantity}</td>
-                                <td style="padding: 10px; text-align: center; color: #f97316; font-weight: bold;">${suc.transfer}</td>
-                                <td style="padding: 10px; text-align: center; font-weight: bold; background: #f0f9ff;">${suc.total}</td>
+                                <td style="padding: 10px; text-align: center; font-weight: bold; color: #059669;">${suc.quantity}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -648,8 +615,6 @@ function renderSinRutaTabAccesorios(sucursalesData) {
                         <tr style="font-weight: bold;">
                             <td colspan="2" style="padding: 10px; text-align: right;">TOTAL:</td>
                             <td style="padding: 10px; text-align: center; color: #059669;">${totalQuantity}</td>
-                            <td style="padding: 10px; text-align: center; color: #f97316;">${totalTransfer}</td>
-                            <td style="padding: 10px; text-align: center; background: #e8f4f8;">${totalGeneral}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -675,7 +640,6 @@ async function searchInventarioAccesorios() {
     document.getElementById('inventarioAccesoriosInfoAlert').style.display = 'none';
     
     try {
-        // Obtener datos en paralelo
         const [stockData, cost, price, salesAmount] = await Promise.all([
             fetchInventoryByAccesorio(currentAccesorioId),
             fetchProductCost(currentAccesorioId),
@@ -687,7 +651,7 @@ async function searchInventarioAccesorios() {
         
         console.log('📊 DATOS RECIBIDOS:');
         stockData.forEach(item => {
-            console.log(`   - "${item.branch_name}" (${item.warehouse_name}) -> 📦${item.quantity} 🚚${item.transfer_quantity}`);
+            console.log(`   - "${item.branch_name}" (${item.warehouse_name}) -> 📦${item.quantity}`);
         });
         console.log(`💰 Costo: ${cost}`);
         console.log(`💰 Precio: ${price}`);
@@ -695,7 +659,6 @@ async function searchInventarioAccesorios() {
         
         // ========== SEPARAR ALMACÉN GENERAL ==========
         let almacenGeneralQuantity = 0;
-        let almacenGeneralTransfer = 0;
         const otrasSucursales = [];
         
         for (const item of stockData) {
@@ -704,7 +667,6 @@ async function searchInventarioAccesorios() {
             
             if (isAlmacenGeneralAccesorios(branchName, warehouseName)) {
                 almacenGeneralQuantity += item.quantity || 0;
-                almacenGeneralTransfer += item.transfer_quantity || 0;
                 console.log(`🏭 ALMACÉN GENERAL: +${item.quantity} (${branchName})`);
             } else {
                 otrasSucursales.push(item);
@@ -712,9 +674,9 @@ async function searchInventarioAccesorios() {
             }
         }
         
-        console.log(`📊 TOTAL ALMACÉN GENERAL: ${almacenGeneralQuantity} + ${almacenGeneralTransfer} en tránsito`);
+        console.log(`📊 TOTAL ALMACÉN GENERAL: ${almacenGeneralQuantity}`);
         
-        // ========== ENCONTRAR SUCURSALES SIN RUTA ==========
+        // ========== ENCONTRAR SUCURSALES CON RUTA Y SIN RUTA ==========
         const sucursalesEnRuta = new Set();
         for (const ruta of Object.values(RUTAS_ACCESORIOS_CONFIG)) {
             for (const suc of ruta.sucursales) {
@@ -723,51 +685,45 @@ async function searchInventarioAccesorios() {
         }
         
         const sucursalesSinRuta = [];
+        let totalSucursalesConRuta = 0;
+        let totalSucursalesSinRuta = 0;
+        
         for (const item of otrasSucursales) {
             const branchName = item.branch_name;
             if (branchName) {
                 const normalizedBranch = normalizeText(branchName);
-                const hasStock = (item.quantity > 0 || item.transfer_quantity > 0);
-                if (!sucursalesEnRuta.has(normalizedBranch) && hasStock) {
-                    const existing = sucursalesSinRuta.find(s => s.nombre === branchName);
-                    if (existing) {
-                        existing.quantity += item.quantity || 0;
-                        existing.transfer += item.transfer_quantity || 0;
-                        existing.total = existing.quantity + existing.transfer;
-                        existing.hasStock = true;
+                const quantity = item.quantity || 0;
+                const hasStock = quantity > 0;
+                
+                // SOLO si tiene stock y NO es Almacén General (ya filtrado en otrasSucursales)
+                if (hasStock) {
+                    if (sucursalesEnRuta.has(normalizedBranch)) {
+                        totalSucursalesConRuta += quantity;
+                        console.log(`✅ Con ruta: ${branchName} -> +${quantity}`);
                     } else {
-                        sucursalesSinRuta.push({
-                            nombre: branchName,
-                            quantity: item.quantity || 0,
-                            transfer: item.transfer_quantity || 0,
-                            total: (item.quantity || 0) + (item.transfer_quantity || 0),
-                            hasStock: true
-                        });
+                        const existing = sucursalesSinRuta.find(s => s.nombre === branchName);
+                        if (existing) {
+                            existing.quantity += quantity;
+                            existing.hasStock = true;
+                        } else {
+                            sucursalesSinRuta.push({
+                                nombre: branchName,
+                                quantity: quantity,
+                                hasStock: true
+                            });
+                        }
+                        totalSucursalesSinRuta += quantity;
+                        console.log(`⚠️ Sin ruta: ${branchName} -> +${quantity}`);
                     }
                 }
             }
         }
         
-        console.log(`📊 Sucursales sin ruta con stock: ${sucursalesSinRuta.length}`);
+        console.log(`📊 Sucursales con ruta: ${totalSucursalesConRuta}`);
+        console.log(`📊 Sucursales sin ruta: ${totalSucursalesSinRuta}`);
         
-        // ========== CALCULAR TOTALES GENERALES ==========
-        let totalGeneralQuantity = almacenGeneralQuantity;
-        let totalGeneralTransfer = almacenGeneralTransfer;
-        
-        for (const ruta of Object.values(RUTAS_ACCESORIOS_CONFIG)) {
-            for (const sucursal of ruta.sucursales) {
-                const inv = getInventoryBySucursalAccesorios(otrasSucursales, sucursal);
-                totalGeneralQuantity += inv.quantity;
-                totalGeneralTransfer += inv.transfer_quantity;
-            }
-        }
-        
-        for (const suc of sucursalesSinRuta) {
-            totalGeneralQuantity += suc.quantity;
-            totalGeneralTransfer += suc.transfer;
-        }
-        
-        const totalGeneral = totalGeneralQuantity + totalGeneralTransfer;
+        // ========== CALCULAR TOTALES ==========
+        const inventarioTotal = almacenGeneralQuantity + totalSucursalesConRuta + totalSucursalesSinRuta;
         
         // ========== CALCULAR MARKUP Y PIEZAS VENDIDAS ==========
         const priceWithIVA = price ? price * 1.16 : null;
@@ -780,27 +736,28 @@ async function searchInventarioAccesorios() {
         // ========== CONSTRUIR HTML ==========
         let resultsHtml = `
             <!-- Tarjetas de resumen de inventario -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
                 <div class="stat-card" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">
-                    <div class="stat-number" style="font-size: 0.8rem;">${escapeHtml(currentAccesorioName.length > 25 ? currentAccesorioName.substring(0, 25) + '...' : currentAccesorioName)}</div>
-                    <div class="stat-label">🔌 Accesorio</div>
+                    <div class="stat-number" style="font-size: 1.95rem;">${escapeHtml(currentAccesorioName.length > 22 ? currentAccesorioName.substring(0, 22) + '...' : currentAccesorioName)}</div>
+                    <!-- <div class="stat-label">🔌 Accesorio</div> -->
                 </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">
+                <div class="stat-card" style="background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);">
                     <div class="stat-number">${almacenGeneralQuantity}</div>
                     <div class="stat-label">🏭 Almacén General</div>
-                    ${almacenGeneralTransfer > 0 ? `<div style="font-size: 0.65rem;">🚚 +${almacenGeneralTransfer} en tránsito</div>` : ''}
                 </div>
                 <div class="stat-card" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
-                    <div class="stat-number">${totalGeneralQuantity}</div>
-                    <div class="stat-label">📦 Total almacenes</div>
+                    <div class="stat-number">${totalSucursalesConRuta}</div>
+                    <div class="stat-label">📦 Sucursales</div>
                 </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);">
-                    <div class="stat-number">${totalGeneralTransfer}</div>
-                    <div class="stat-label">🚚 Total tránsito</div>
+                ${totalSucursalesSinRuta > 0 ? `
+                <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);">
+                    <div class="stat-number">${totalSucursalesSinRuta}</div>
+                    <div class="stat-label">⚠️ Sin Ruta</div>
                 </div>
+                ` : ''}
                 <div class="stat-card" style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);">
-                    <div class="stat-number">${totalGeneral}</div>
-                    <div class="stat-label">📊 TOTAL GENERAL</div>
+                    <div class="stat-number">${inventarioTotal}</div>
+                    <div class="stat-label">📊 INVENTARIO TOTAL</div>
                 </div>
             </div>
             
@@ -808,7 +765,7 @@ async function searchInventarioAccesorios() {
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px;">
                 <div class="stat-card" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);">
                     <div class="stat-number" style="font-size: 1.1rem;">${cost !== null && cost !== undefined ? formatCurrency(cost) : 'N/D'}</div>
-                    <div class="stat-label">💰 Costo</div>
+                    <div class="stat-label">💰 Costo (sin IVA)</div>
                 </div>
                 <div class="stat-card" style="background: linear-gradient(135deg, #059669 0%, #34d399 100%);">
                     <div class="stat-number" style="font-size: 1.1rem;">${price !== null && price !== undefined ? formatCurrency(price) : 'N/D'}</div>
@@ -858,7 +815,6 @@ async function searchInventarioAccesorios() {
             `;
         }
         
-        // ====== BOTÓN DE EXPORTAR ======
         resultsHtml += `
             <div style="display: flex; justify-content: flex-end; margin-top: 20px; gap: 10px;">
                 <button id="exportAccesoriosExcelBtn" class="btn-export-excel" style="background: #059669; padding: 10px 24px; border-radius: 8px; color: white; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
@@ -870,19 +826,15 @@ async function searchInventarioAccesorios() {
         document.getElementById('inventarioAccesoriosResults').innerHTML = resultsHtml;
         document.getElementById('inventarioAccesoriosResults').style.display = 'block';
         
-        // Inicializar pestañas
         initInventarioTabsAccesorios();
         
-        // Agregar listener al botón de exportar
         const exportBtn = document.getElementById('exportAccesoriosExcelBtn');
         if (exportBtn) {
             exportBtn.removeEventListener('click', exportAccesoriosToExcel);
             exportBtn.addEventListener('click', exportAccesoriosToExcel);
         }
         
-        const hasStock = stockData.some(item => 
-            (item.quantity || 0) > 0 || (item.transfer_quantity || 0) > 0
-        );
+        const hasStock = stockData.some(item => (item.quantity || 0) > 0);
         
         if (!hasStock) {
             showInfo('inventarioAccesorios', '⚠️ No hay inventario disponible para este accesorio en ninguna sucursal');
@@ -942,9 +894,7 @@ function exportAccesoriosToExcel() {
     }
     
     try {
-        const filteredData = currentStockData.filter(item => 
-            (item.quantity || 0) > 0 || (item.transfer_quantity || 0) > 0
-        );
+        const filteredData = currentStockData.filter(item => (item.quantity || 0) > 0);
         
         if (filteredData.length === 0) {
             showError('inventarioAccesorios', 'No hay datos con stock para exportar');
@@ -958,7 +908,7 @@ function exportAccesoriosToExcel() {
         excelData.push(['Fecha de consulta:', new Date().toLocaleString()]);
         excelData.push([]);
         
-        excelData.push(['#', 'Sucursal', 'Almacén', 'Cantidad', 'En Tránsito', 'Total']);
+        excelData.push(['#', 'Sucursal', 'Almacén', 'Cantidad']);
         
         const sortedData = [...filteredData].sort((a, b) => {
             const branchA = (a.branch_name || '').toLowerCase();
@@ -969,26 +919,21 @@ function exportAccesoriosToExcel() {
         });
         
         let totalQty = 0;
-        let totalTransfer = 0;
         
         sortedData.forEach((item, index) => {
             const qty = item.quantity || 0;
-            const transfer = item.transfer_quantity || 0;
             totalQty += qty;
-            totalTransfer += transfer;
             
             excelData.push([
                 index + 1,
                 item.branch_name || 'Sin sucursal',
                 item.warehouse_name || 'Sin almacén',
-                qty,
-                transfer,
-                qty + transfer
+                qty
             ]);
         });
         
         excelData.push([]);
-        excelData.push(['', '', 'TOTALES:', totalQty, totalTransfer, totalQty + totalTransfer]);
+        excelData.push(['', '', 'TOTAL:', totalQty]);
         
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(excelData);
@@ -997,8 +942,6 @@ function exportAccesoriosToExcel() {
             { wch: 5 },
             { wch: 30 },
             { wch: 30 },
-            { wch: 12 },
-            { wch: 12 },
             { wch: 12 }
         ];
         
