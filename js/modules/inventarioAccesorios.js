@@ -1,6 +1,6 @@
 // ==================== MÓDULO: INVENTARIO ACCESORIOS ====================
 // Este módulo consulta el inventario de accesorios (classification_id=2)
-// y muestra el stock clasificado por rutas + exportación a Excel
+// y muestra el stock clasificado por rutas + tarjetas de costo, precio, markup y ventas
 
 let accesoriosCache = [];
 let accesoriosCargados = false;
@@ -96,6 +96,128 @@ function showInfo(module, message) {
     }
 }
 
+function formatCurrency(value) {
+    if (value === undefined || value === null || isNaN(value)) return '$0.00';
+    return '$' + parseFloat(value).toFixed(2);
+}
+
+// ==================== OBTENER COSTO DEL PRODUCTO (desde supply.gcasan.com) ====================
+async function fetchProductCost(productId) {
+    try {
+        const url = `https://supply.gcasan.com/api/products/${productId}/cost`;
+        console.log(`📡 Consultando costo: ${url}`);
+        
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
+        });
+        
+        if (!response.ok) {
+            console.warn(`⚠️ Error al obtener costo: ${response.status}`);
+            return null;
+        }
+        
+        const data = await response.json();
+        console.log(`💰 Costo obtenido:`, data);
+        
+        // La respuesta tiene la estructura: { message: "...", data: { id, product_id, cost, ... } }
+        if (data && data.data && data.data.cost !== undefined) {
+            const costValue = parseFloat(data.data.cost);
+            if (!isNaN(costValue) && costValue > 0) {
+                console.log(`✅ Costo encontrado: ${costValue}`);
+                return costValue;
+            }
+        }
+        
+        // Fallback: buscar en la raíz si existe
+        if (data && data.cost !== undefined) {
+            const costValue = parseFloat(data.cost);
+            if (!isNaN(costValue) && costValue > 0) {
+                console.log(`✅ Costo encontrado (raíz): ${costValue}`);
+                return costValue;
+            }
+        }
+        
+        console.warn(`⚠️ No se encontró costo para el producto ${productId}`);
+        return null;
+        
+    } catch (error) {
+        console.error('❌ Error consultando costo:', error);
+        return null;
+    }
+}
+
+// ==================== OBTENER PRECIO DE VENTA (desde catalogs.gcasan.com) ====================
+async function fetchProductPrice(productId) {
+    try {
+        const url = `https://catalogs.gcasan.com/api/products/${productId}/price?per_page=-1&product_id=${productId}&price_type_id=1`;
+        console.log(`📡 Consultando precio: ${url}`);
+        
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
+        });
+        
+        if (!response.ok) {
+            console.warn(`⚠️ Error al obtener precio: ${response.status}`);
+            return null;
+        }
+        
+        const data = await response.json();
+        console.log(`💰 Precio obtenido:`, data);
+        
+        // La respuesta tiene un array 'data' con objetos que contienen 'price'
+        if (data && data.data && data.data.length > 0) {
+            // Buscar precio general (branch_id = null) o tomar el primero
+            const priceItem = data.data.find(p => p.branch_id === null) || data.data[0];
+            const price = parseFloat(priceItem.price);
+            if (!isNaN(price) && price > 0) {
+                return price;
+            }
+        }
+        return null;
+        
+    } catch (error) {
+        console.error('❌ Error consultando precio:', error);
+        return null;
+    }
+}
+
+// ==================== OBTENER VENTAS DEL MES ANTERIOR (desde reports.gcasan.com) ====================
+async function fetchPreviousMonthSales(productId) {
+    try {
+        // Calcular el mes anterior
+        const now = new Date();
+        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const startDate = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01 06:00:00`;
+        const lastDay = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0).getDate();
+        const endDate = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')} 06:00:00`;
+        
+        const url = `https://reports.gcasan.com/api/sales/product-sales?start_date=${startDate}&end_date=${endDate}&product_ids[]=${productId}&page=1&per_page=1`;
+        console.log(`📡 Consultando ventas mes anterior: ${url}`);
+        
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
+        });
+        
+        if (!response.ok) {
+            console.warn(`⚠️ Error al obtener ventas: ${response.status}`);
+            return null;
+        }
+        
+        const data = await response.json();
+        console.log(`📊 Ventas mes anterior:`, data);
+        
+        // Obtener el total_amount de la primera página
+        if (data && data.total_amount !== undefined) {
+            return parseFloat(data.total_amount) || 0;
+        }
+        return 0;
+        
+    } catch (error) {
+        console.error('❌ Error consultando ventas:', error);
+        return null;
+    }
+}
+
 // ==================== CARGA DE CATÁLOGO DE ACCESORIOS ====================
 async function loadAccesoriosCatalog() {
     console.log('📦 Iniciando carga de catálogo de accesorios...');
@@ -185,7 +307,6 @@ async function loadAccesoriosCatalog() {
             }, 3000);
         }
         
-        // Activar el input para búsqueda después de cargar
         setupAccesoriosEventListeners();
         
         return accesoriosCache;
@@ -554,13 +675,23 @@ async function searchInventarioAccesorios() {
     document.getElementById('inventarioAccesoriosInfoAlert').style.display = 'none';
     
     try {
-        const stockData = await fetchInventoryByAccesorio(currentAccesorioId);
+        // Obtener datos en paralelo
+        const [stockData, cost, price, salesAmount] = await Promise.all([
+            fetchInventoryByAccesorio(currentAccesorioId),
+            fetchProductCost(currentAccesorioId),
+            fetchProductPrice(currentAccesorioId),
+            fetchPreviousMonthSales(currentAccesorioId)
+        ]);
+        
         currentStockData = stockData;
         
         console.log('📊 DATOS RECIBIDOS:');
         stockData.forEach(item => {
             console.log(`   - "${item.branch_name}" (${item.warehouse_name}) -> 📦${item.quantity} 🚚${item.transfer_quantity}`);
         });
+        console.log(`💰 Costo: ${cost}`);
+        console.log(`💰 Precio: ${price}`);
+        console.log(`📊 Ventas mes anterior: ${salesAmount}`);
         
         // ========== SEPARAR ALMACÉN GENERAL ==========
         let almacenGeneralQuantity = 0;
@@ -638,12 +769,20 @@ async function searchInventarioAccesorios() {
         
         const totalGeneral = totalGeneralQuantity + totalGeneralTransfer;
         
+        // ========== CALCULAR MARKUP Y PIEZAS VENDIDAS ==========
+        const priceWithIVA = price ? price * 1.16 : null;
+        const markup = (price && cost && price > 0) ? ((price - cost) / price) * 100 : null;
+        let piecesSold = null;
+        if (salesAmount !== null && salesAmount !== undefined && priceWithIVA && priceWithIVA > 0) {
+            piecesSold = salesAmount / priceWithIVA;
+        }
+        
         // ========== CONSTRUIR HTML ==========
         let resultsHtml = `
-            <!-- Tarjetas de resumen -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <!-- Tarjetas de resumen de inventario -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px;">
                 <div class="stat-card" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">
-                    <div class="stat-number" style="font-size: 0.75rem;">${escapeHtml(currentAccesorioName.length > 30 ? currentAccesorioName.substring(0, 30) + '...' : currentAccesorioName)}</div>
+                    <div class="stat-number" style="font-size: 0.8rem;">${escapeHtml(currentAccesorioName.length > 25 ? currentAccesorioName.substring(0, 25) + '...' : currentAccesorioName)}</div>
                     <div class="stat-label">🔌 Accesorio</div>
                 </div>
                 <div class="stat-card" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">
@@ -662,6 +801,28 @@ async function searchInventarioAccesorios() {
                 <div class="stat-card" style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);">
                     <div class="stat-number">${totalGeneral}</div>
                     <div class="stat-label">📊 TOTAL GENERAL</div>
+                </div>
+            </div>
+            
+            <!-- Tarjetas de costo, precio, markup y piezas vendidas -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px;">
+                <div class="stat-card" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);">
+                    <div class="stat-number" style="font-size: 1.1rem;">${cost !== null && cost !== undefined ? formatCurrency(cost) : 'N/D'}</div>
+                    <div class="stat-label">💰 Costo</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #059669 0%, #34d399 100%);">
+                    <div class="stat-number" style="font-size: 1.1rem;">${price !== null && price !== undefined ? formatCurrency(price) : 'N/D'}</div>
+                    <div class="stat-label">🏷️ Precio Venta (sin IVA)</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);">
+                    <div class="stat-number" style="font-size: 1.1rem; ${markup !== null && markup < 0 ? 'color: #dc2626;' : ''}">${markup !== null ? markup.toFixed(1) + '%' : 'N/D'}</div>
+                    <div class="stat-label">📈 Markup</div>
+                    ${markup !== null ? `<div style="font-size: 0.6rem; opacity: 0.8;">${markup >= 20 ? '✅ Buen margen' : markup >= 10 ? '⚠️ Margen medio' : '🔴 Margen bajo'}</div>` : ''}
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);">
+                    <div class="stat-number" style="font-size: 1.1rem;">${piecesSold !== null && piecesSold !== undefined ? Math.round(piecesSold) : 'N/D'}</div>
+                    <div class="stat-label">📦 Piezas vendidas (mes anterior)</div>
+                    ${piecesSold !== null && piecesSold !== undefined && salesAmount ? `<div style="font-size: 0.6rem; opacity: 0.8;">Ventas: ${formatCurrency(salesAmount)}</div>` : ''}
                 </div>
             </div>
             
