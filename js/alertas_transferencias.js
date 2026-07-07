@@ -90,6 +90,8 @@ async function verificarTransferenciasPendientes(forzar = false) {
                     almacenOrigen = 'Equipos Matriz';
                 } else if (nombreAlmacen.includes('accesorios matriz') || nombreAlmacen.includes('accesorios matrix')) {
                     almacenOrigen = 'Accesorios Matriz';
+                } else if (nombreAlmacen.includes('promocionales') || nombreAlmacen.includes('promocional')) {
+                    almacenOrigen = 'Promocionales';    
                 } else {
                     almacenOrigen = 'Otros';
                 }
@@ -137,7 +139,7 @@ async function verificarTransferenciasPendientes(forzar = false) {
         };
 
         // Orden de almacenes
-        const ordenAlmacenes = ['TAE', 'Equipos Matriz', 'Accesorios Matriz', 'Otros'];
+        const ordenAlmacenes = ['TAE', 'Equipos Matriz', 'Accesorios Matriz','Promocionales', 'Otros'];
 
         for (const almacen of ordenAlmacenes) {
             if (almacenesMap.has(almacen)) {
@@ -197,7 +199,7 @@ function mostrarModalTransferencias(data) {
     `;
 
     // Generar pestañas
-    const ordenAlmacenes = ['TAE', 'Equipos Matriz', 'Accesorios Matriz', 'Otros'];
+    const ordenAlmacenes = ['TAE', 'Equipos Matriz', 'Accesorios Matriz', 'Promocionales', 'Otros'];
     let tabsHtml = '';
     let contentHtml = '';
 
@@ -206,6 +208,7 @@ function mostrarModalTransferencias(data) {
         'TAE': '📱',
         'Equipos Matriz': '📱',
         'Accesorios Matriz': '🔌',
+        'Promocionales': '📦',
         'Otros': '📦'
     };
 
@@ -214,6 +217,7 @@ function mostrarModalTransferencias(data) {
         'TAE': '#8b5cf6',
         'Equipos Matriz': '#3b82f6',
         'Accesorios Matriz': '#f97316',
+        'Promocionales': '#14af3b',
         'Otros': '#64748b'
     };
 

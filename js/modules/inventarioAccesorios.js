@@ -495,7 +495,7 @@ function getInventoryBySucursalAccesorios(stockItems, sucursalNombre) {
     };
 }
 
-// ==================== RENDERIZADO DE TABLAS POR RUTA ====================
+// ==================== RENDERIZADO DE TABLAS POR RUTA (MEJORADO) ====================
 function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
     const sucursales = rutaData.sucursales;
     const color = rutaData.color;
@@ -517,45 +517,45 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
     const sinStockCount = sucursalesData.filter(s => !s.hasStock).length;
     
     return `
-        <div style="background: white; border-radius: 16px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-            <div style="background: ${color}; color: white; padding: 12px 16px;">
+        <div style="background: white; border-radius: 12px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);">
+            <div style="background: ${color}; color: white; padding: 14px 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                     <div>
-                        <span style="font-size: 1.2rem;">${icon}</span>
-                        <strong style="margin-left: 8px;">${rutaNombre}</strong>
-                        <span style="margin-left: 10px; font-size: 0.7rem; opacity: 0.9;">${sucursales.length} sucursales</span>
-                        ${sinStockCount > 0 ? `<span style="margin-left: 10px; font-size: 0.65rem; background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 20px;">⚠️ ${sinStockCount} sin stock</span>` : ''}
+                        <span style="font-size: 1.4rem;">${icon}</span>
+                        <strong style="font-size: 1.1rem; margin-left: 10px;">${rutaNombre}</strong>
+                        <span style="margin-left: 12px; font-size: 0.8rem; opacity: 0.9;">${sucursales.length} sucursales</span>
+                        ${sinStockCount > 0 ? `<span style="margin-left: 12px; font-size: 0.7rem; background: rgba(0,0,0,0.2); padding: 2px 12px; border-radius: 20px;">⚠️ ${sinStockCount} sin stock</span>` : ''}
                     </div>
-                    <div style="display: flex; gap: 15px; font-size: 0.75rem;">
-                        <span>📦 ${totalQuantity}</span>
+                    <div style="display: flex; gap: 20px; font-size: 0.9rem;">
+                        <span style="font-weight: bold;">📦 ${totalQuantity}</span>
                     </div>
                 </div>
             </div>
-            <div style="padding: 0;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem;">
-                    <thead style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+            <div style="padding: 0; overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
+                    <thead style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
                         <tr>
-                            <th style="padding: 10px; text-align: left;">#</th>
-                            <th style="padding: 10px; text-align: left;">Sucursal</th>
-                            <th style="padding: 10px; text-align: center; width: 90px;">📦 Cantidad</th>
+                            <th style="padding: 14px 16px; text-align: center; width: 60px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">#</th>
+                            <th style="padding: 14px 16px; text-align: left; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">🏪 Sucursal</th>
+                            <th style="padding: 14px 16px; text-align: center; width: 120px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">📦 Cantidad</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${sucursalesData.map((suc, idx) => `
-                            <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : ''}">
-                                <td style="padding: 10px; text-align: center;">${idx + 1}</td>
-                                <td style="padding: 10px; font-weight: 500;">
+                            <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : (idx % 2 === 0 ? 'background-color: #fafafa;' : '')}">
+                                <td style="padding: 12px 16px; text-align: center; color: #64748b; font-size: 0.9rem;">${idx + 1}</td>
+                                <td style="padding: 12px 16px; font-weight: 500; font-size: 0.95rem;">
                                     🏪 ${escapeHtml(suc.nombre)}
-                                    ${!suc.hasStock ? '<span style="margin-left: 8px; font-size: 0.65rem; color: #dc2626;">⚠️ SIN STOCK</span>' : ''}
+                                    ${!suc.hasStock ? '<span style="margin-left: 12px; font-size: 0.75rem; color: #dc2626; font-weight: 600;">⚠️ SIN STOCK</span>' : ''}
                                 </td>
-                                <td style="padding: 10px; text-align: center; font-weight: bold; color: #059669;">${suc.quantity}</td>
+                                <td style="padding: 12px 16px; text-align: center; font-weight: bold; color: ${suc.hasStock ? '#059669' : '#94a3b8'}; font-size: 1.05rem;">${suc.quantity}</td>
                             </tr>
                         `).join('')}
                     </tbody>
-                    <tfoot style="background: #f8fafc; border-top: 2px solid ${color};">
+                    <tfoot style="background: #f1f5f9; border-top: 2px solid ${color};">
                         <tr style="font-weight: bold;">
-                            <td colspan="2" style="padding: 10px; text-align: right;">TOTAL ${rutaNombre}:</td>
-                            <td style="padding: 10px; text-align: center; color: #059669;">${totalQuantity}</td>
+                            <td colspan="2" style="padding: 14px 16px; text-align: right; font-size: 0.95rem; color: #1e293b;">TOTAL ${rutaNombre}:</td>
+                            <td style="padding: 14px 16px; text-align: center; font-size: 1.1rem; color: ${color};">${totalQuantity}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -576,45 +576,45 @@ function renderSinRutaTabAccesorios(sucursalesData) {
     const sinStockCount = sucursalesData.filter(s => !s.hasStock).length;
     
     return `
-        <div style="background: white; border-radius: 16px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-            <div style="background: #64748b; color: white; padding: 12px 16px;">
+        <div style="background: white; border-radius: 12px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);">
+            <div style="background: #64748b; color: white; padding: 14px 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                     <div>
-                        <span style="font-size: 1.2rem;">⚠️</span>
-                        <strong style="margin-left: 8px;">Sin Ruta Asignada</strong>
-                        <span style="margin-left: 10px; font-size: 0.7rem; opacity: 0.9;">${sucursalesData.length} sucursales</span>
-                        ${sinStockCount > 0 ? `<span style="margin-left: 10px; font-size: 0.65rem; background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 20px;">⚠️ ${sinStockCount} sin stock</span>` : ''}
+                        <span style="font-size: 1.4rem;">⚠️</span>
+                        <strong style="font-size: 1.1rem; margin-left: 10px;">Sin Ruta Asignada</strong>
+                        <span style="margin-left: 12px; font-size: 0.8rem; opacity: 0.9;">${sucursalesData.length} sucursales</span>
+                        ${sinStockCount > 0 ? `<span style="margin-left: 12px; font-size: 0.7rem; background: rgba(0,0,0,0.2); padding: 2px 12px; border-radius: 20px;">⚠️ ${sinStockCount} sin stock</span>` : ''}
                     </div>
-                    <div style="display: flex; gap: 15px; font-size: 0.75rem;">
-                        <span>📦 ${totalQuantity}</span>
+                    <div style="display: flex; gap: 20px; font-size: 0.9rem;">
+                        <span style="font-weight: bold;">📦 ${totalQuantity}</span>
                     </div>
                 </div>
             </div>
-            <div style="padding: 0;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem;">
-                    <thead style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+            <div style="padding: 0; overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
+                    <thead style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
                         <tr>
-                            <th style="padding: 10px; text-align: left;">#</th>
-                            <th style="padding: 10px; text-align: left;">Sucursal</th>
-                            <th style="padding: 10px; text-align: center; width: 90px;">📦 Cantidad</th>
+                            <th style="padding: 14px 16px; text-align: center; width: 60px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">#</th>
+                            <th style="padding: 14px 16px; text-align: left; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">🏪 Sucursal</th>
+                            <th style="padding: 14px 16px; text-align: center; width: 120px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">📦 Cantidad</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${sucursalesData.map((suc, idx) => `
-                            <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : ''}">
-                                <td style="padding: 10px; text-align: center;">${idx + 1}</td>
-                                <td style="padding: 10px; font-weight: 500;">
+                            <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : (idx % 2 === 0 ? 'background-color: #fafafa;' : '')}">
+                                <td style="padding: 12px 16px; text-align: center; color: #64748b; font-size: 0.9rem;">${idx + 1}</td>
+                                <td style="padding: 12px 16px; font-weight: 500; font-size: 0.95rem;">
                                     🏪 ${escapeHtml(suc.nombre)}
-                                    ${!suc.hasStock ? '<span style="margin-left: 8px; font-size: 0.65rem; color: #dc2626;">⚠️ SIN STOCK</span>' : ''}
+                                    ${!suc.hasStock ? '<span style="margin-left: 12px; font-size: 0.75rem; color: #dc2626; font-weight: 600;">⚠️ SIN STOCK</span>' : ''}
                                 </td>
-                                <td style="padding: 10px; text-align: center; font-weight: bold; color: #059669;">${suc.quantity}</td>
+                                <td style="padding: 12px 16px; text-align: center; font-weight: bold; color: ${suc.hasStock ? '#059669' : '#94a3b8'}; font-size: 1.05rem;">${suc.quantity}</td>
                             </tr>
                         `).join('')}
                     </tbody>
-                    <tfoot style="background: #f8fafc; border-top: 2px solid #64748b;">
+                    <tfoot style="background: #f1f5f9; border-top: 2px solid #64748b;">
                         <tr style="font-weight: bold;">
-                            <td colspan="2" style="padding: 10px; text-align: right;">TOTAL:</td>
-                            <td style="padding: 10px; text-align: center; color: #059669;">${totalQuantity}</td>
+                            <td colspan="2" style="padding: 14px 16px; text-align: right; font-size: 0.95rem; color: #1e293b;">TOTAL:</td>
+                            <td style="padding: 14px 16px; text-align: center; font-size: 1.1rem; color: #64748b;">${totalQuantity}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -695,7 +695,6 @@ async function searchInventarioAccesorios() {
                 const quantity = item.quantity || 0;
                 const hasStock = quantity > 0;
                 
-                // SOLO si tiene stock y NO es Almacén General (ya filtrado en otrasSucursales)
                 if (hasStock) {
                     if (sucursalesEnRuta.has(normalizedBranch)) {
                         totalSucursalesConRuta += quantity;
@@ -738,8 +737,8 @@ async function searchInventarioAccesorios() {
             <!-- Tarjetas de resumen de inventario -->
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
                 <div class="stat-card" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">
-                    <div class="stat-number" style="font-size: 1.95rem;">${escapeHtml(currentAccesorioName.length > 22 ? currentAccesorioName.substring(0, 22) + '...' : currentAccesorioName)}</div>
-                    <!-- <div class="stat-label">🔌 Accesorio</div> -->
+                    <div class="stat-number" style="font-size: 1.50rem;">${escapeHtml(currentAccesorioName.length > 22 ? currentAccesorioName.substring(0, 22) + '...' : currentAccesorioName)}</div>
+                
                 </div>
                 <div class="stat-card" style="background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);">
                     <div class="stat-number">${almacenGeneralQuantity}</div>
