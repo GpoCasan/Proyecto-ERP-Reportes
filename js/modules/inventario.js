@@ -7,39 +7,9 @@ let currentProductId = null;
 let searchTimeout = null;
 let currentProductName = '';
 
-// ==================== CONFIGURACIÓN DE RUTAS ====================
-const RUTAS_CONFIG = {
-    "Ruta 1": {
-        sucursales: ["Calkini", "Halacho", "Hecelchakan", "Hunucma", "Muna", "Tenabo", "Ticul 2", "Uman"],
-        color: "#3b82f6",
-        icon: "🚚"
-    },
-    "Ruta 2": {
-        sucursales: ["Acanceh", "Chemax", "Chemax 2", "Hoctun", "Homun", "Huhi", "Kanasin", "Piste 2", "Sotuta", "Seye", "Valladolid Waldos", "Xocchel"],
-        color: "#059669",
-        icon: "🚚"
-    },
-    "Ruta 3": {
-        sucursales: ["Baca", "Buctzotz", "Conkal", "Izamal", "Motul Mercado", "Dzidzantun", "Temax", "Tixkokob", "Tizimin", "Tizimin 2"],
-        color: "#dc2626",
-        icon: "🚚"
-    },
-    "Ruta 4": {
-        sucursales: ["Dziuche", "Morelos", "Oxkutzcab 2", "Oxkutzcab 3", "Peto 2", "Teabo", "Tecoh", "Tekax", "Tekax 2", "Tekit", "Tzucacab"],
-        color: "#f97316",
-        icon: "🚚"
-    }
-};
-
-// Palabras clave para detectar Almacén General (MÁS COMPLETO)
-const ALMACEN_GENERAL_KEYWORDS = [
-    "almacen general", 
-    "equipos matriz", 
-    "casa matriz", 
-    "almacen matriz", 
-    "matriz",
-    "almacén general"  // con acento
-];
+// ==================== CONFIGURACIÓN DE RUTAS (USAR LA GLOBAL) ====================
+// NOTA: RUTAS_CONFIG y ALMACEN_GENERAL_KEYWORDS ahora vienen de config.js
+// No es necesario redeclararlas aquí
 
 function getLineName(lineId) {
     if (lineId === 4) return "Telcel";
@@ -68,6 +38,31 @@ function getSafeName(product) {
         return product.name;
     }
     return `Producto ID: ${product.id}`;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showError(module, message) {
+    const alert = document.getElementById(`${module}ErrorAlert`);
+    if (alert) {
+        alert.innerHTML = `❌ ${message}`;
+        alert.style.display = 'block';
+        setTimeout(() => { alert.style.display = 'none'; }, 5000);
+    }
+}
+
+function showInfo(module, message) {
+    const alert = document.getElementById(`${module}InfoAlert`);
+    if (alert) {
+        alert.innerHTML = `ℹ️ ${message}`;
+        alert.style.display = 'block';
+        setTimeout(() => { alert.style.display = 'none'; }, 4000);
+    }
 }
 
 // ==================== CARGA DE CATÁLOGO ====================
@@ -328,7 +323,6 @@ async function fetchInventoryByProduct(productId) {
 // ==================== FUNCIONES DE IDENTIFICACIÓN ====================
 function isAlmacenGeneral(branchName, warehouseName) {
     const nameToCheck = (branchName || warehouseName || '').toLowerCase();
-    // Limpiar caracteres especiales
     const cleaned = nameToCheck.replace(/[^a-z0-9\sáéíóúüñ]/g, '').trim();
     
     for (const keyword of ALMACEN_GENERAL_KEYWORDS) {
@@ -413,23 +407,23 @@ function renderRutaTab(rutaNombre, rutaData, stockItems) {
                     <tbody>
                         ${sucursalesData.map((suc, idx) => `
                             <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : ''}">
-                                <td style="padding: 10px; text-align: center;">${idx + 1}</div>
+                                <td style="padding: 10px; text-align: center;">${idx + 1}</td>
                                 <td style="padding: 10px; font-weight: 500;">
                                     🏪 ${escapeHtml(suc.nombre)}
                                     ${!suc.hasStock ? '<span style="margin-left: 8px; font-size: 0.65rem; color: #dc2626;">⚠️ SIN STOCK</span>' : ''}
-                                </div>
-                                <td style="padding: 10px; text-align: center; color: #059669; font-weight: bold;">${suc.quantity}</div>
-                                <td style="padding: 10px; text-align: center; color: #f97316; font-weight: bold;">${suc.transfer}</div>
-                                <td style="padding: 10px; text-align: center; font-weight: bold; background: #f0f9ff;">${suc.total}</div>
+                                </td>
+                                <td style="padding: 10px; text-align: center; color: #059669; font-weight: bold;">${suc.quantity}</td>
+                                <td style="padding: 10px; text-align: center; color: #f97316; font-weight: bold;">${suc.transfer}</td>
+                                <td style="padding: 10px; text-align: center; font-weight: bold; background: #f0f9ff;">${suc.total}</td>
                             </tr>
                         `).join('')}
                     </tbody>
                     <tfoot style="background: #f8fafc; border-top: 2px solid ${color};">
                         <tr style="font-weight: bold;">
-                            <td colspan="2" style="padding: 10px; text-align: right;">TOTAL ${rutaNombre}:</div>
-                            <td style="padding: 10px; text-align: center; color: #059669;">${totalQuantity}</div>
-                            <td style="padding: 10px; text-align: center; color: #f97316;">${totalTransfer}</div>
-                            <td style="padding: 10px; text-align: center; background: #e8f4f8;">${totalGeneral}</div>
+                            <td colspan="2" style="padding: 10px; text-align: right;">TOTAL ${rutaNombre}:</td>
+                            <td style="padding: 10px; text-align: center; color: #059669;">${totalQuantity}</td>
+                            <td style="padding: 10px; text-align: center; color: #f97316;">${totalTransfer}</td>
+                            <td style="padding: 10px; text-align: center; background: #e8f4f8;">${totalGeneral}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -483,23 +477,23 @@ function renderSinRutaTab(sucursalesData) {
                     <tbody>
                         ${sucursalesData.map((suc, idx) => `
                             <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : ''}">
-                                <td style="padding: 10px; text-align: center;">${idx + 1}</div>
+                                <td style="padding: 10px; text-align: center;">${idx + 1}</td>
                                 <td style="padding: 10px; font-weight: 500;">
                                     🏪 ${escapeHtml(suc.nombre)}
                                     ${!suc.hasStock ? '<span style="margin-left: 8px; font-size: 0.65rem; color: #dc2626;">⚠️ SIN STOCK</span>' : ''}
-                                </div>
-                                <td style="padding: 10px; text-align: center; color: #059669; font-weight: bold;">${suc.quantity}</div>
-                                <td style="padding: 10px; text-align: center; color: #f97316; font-weight: bold;">${suc.transfer}</div>
-                                <td style="padding: 10px; text-align: center; font-weight: bold; background: #f0f9ff;">${suc.total}</div>
+                                </td>
+                                <td style="padding: 10px; text-align: center; color: #059669; font-weight: bold;">${suc.quantity}</td>
+                                <td style="padding: 10px; text-align: center; color: #f97316; font-weight: bold;">${suc.transfer}</td>
+                                <td style="padding: 10px; text-align: center; font-weight: bold; background: #f0f9ff;">${suc.total}</td>
                             </tr>
                         `).join('')}
                     </tbody>
                     <tfoot style="background: #f8fafc; border-top: 2px solid #64748b;">
                         <tr style="font-weight: bold;">
-                            <td colspan="2" style="padding: 10px; text-align: right;">TOTAL:</div>
-                            <td style="padding: 10px; text-align: center; color: #059669;">${totalQuantity}</div>
-                            <td style="padding: 10px; text-align: center; color: #f97316;">${totalTransfer}</div>
-                            <td style="padding: 10px; text-align: center; background: #e8f4f8;">${totalGeneral}</div>
+                            <td colspan="2" style="padding: 10px; text-align: right;">TOTAL:</td>
+                            <td style="padding: 10px; text-align: center; color: #059669;">${totalQuantity}</td>
+                            <td style="padding: 10px; text-align: center; color: #f97316;">${totalTransfer}</td>
+                            <td style="padding: 10px; text-align: center; background: #e8f4f8;">${totalGeneral}</td>
                         </tr>
                     </tfoot>
                 </table>

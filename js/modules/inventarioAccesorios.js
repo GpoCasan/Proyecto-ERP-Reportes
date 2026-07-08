@@ -10,41 +10,10 @@ let searchTimeoutAccesorios = null;
 let currentAccesorioName = '';
 let currentStockData = [];
 
-// ==================== CONFIGURACIÓN DE RUTAS ====================
-const RUTAS_ACCESORIOS_CONFIG = {
-    "Ruta 1": {
-        sucursales: ["Calkini", "Halacho", "Hecelchakan", "Hunucma", "Muna", "Tenabo", "Ticul 2", "Uman"],
-        color: "#3b82f6",
-        icon: "🚚"
-    },
-    "Ruta 2": {
-        sucursales: ["Acanceh", "Chemax", "Chemax 2", "Hoctun", "Homun", "Huhi", "Kanasin", "Piste 2", "Sotuta", "Seye", "Valladolid Waldos", "Xocchel"],
-        color: "#059669",
-        icon: "🚚"
-    },
-    "Ruta 3": {
-        sucursales: ["Baca", "Buctzotz", "Conkal", "Izamal", "Motul Mercado", "Dzidzantun", "Temax", "Tixkokob", "Tizimin", "Tizimin 2"],
-        color: "#dc2626",
-        icon: "🚚"
-    },
-    "Ruta 4": {
-        sucursales: ["Dziuche", "Morelos", "Oxkutzcab 2", "Oxkutzcab 3", "Peto 2", "Teabo", "Tecoh", "Tekax", "Tekax 2", "Tekit", "Tzucacab"],
-        color: "#f97316",
-        icon: "🚚"
-    }
-};
-
-// Palabras clave para detectar Almacén General
-const ALMACEN_GENERAL_ACCESORIOS_KEYWORDS = [
-    "almacen general", 
-    "accesorios matriz", 
-    "casa matriz", 
-    "almacen matriz", 
-    "matriz",
-    "almacén general"
-];
-
 // ==================== CONFIGURACIÓN ====================
+// NOTA: RUTAS_CONFIG y ALMACEN_GENERAL_KEYWORDS ahora vienen de config.js
+// No es necesario redeclararlas aquí
+
 const ACCESORIOS_CLASSIFICATION_ID = 2;
 
 // ==================== FUNCIONES DE UTILERÍA ====================
@@ -472,7 +441,8 @@ function isAlmacenGeneralAccesorios(branchName, warehouseName) {
     const nameToCheck = (branchName || warehouseName || '').toLowerCase();
     const cleaned = nameToCheck.replace(/[^a-z0-9\sáéíóúüñ]/g, '').trim();
     
-    for (const keyword of ALMACEN_GENERAL_ACCESORIOS_KEYWORDS) {
+    // Usar ALMACEN_GENERAL_KEYWORDS desde config.js
+    for (const keyword of ALMACEN_GENERAL_KEYWORDS) {
         if (cleaned.includes(keyword.toLowerCase())) {
             console.log(`✅ Almacén General detectado: "${nameToCheck}"`);
             return true;
@@ -678,7 +648,8 @@ async function searchInventarioAccesorios() {
         
         // ========== ENCONTRAR SUCURSALES CON RUTA Y SIN RUTA ==========
         const sucursalesEnRuta = new Set();
-        for (const ruta of Object.values(RUTAS_ACCESORIOS_CONFIG)) {
+        // Usar RUTAS_CONFIG desde config.js
+        for (const ruta of Object.values(RUTAS_CONFIG)) {
             for (const suc of ruta.sucursales) {
                 sucursalesEnRuta.add(normalizeText(suc));
             }
@@ -738,7 +709,6 @@ async function searchInventarioAccesorios() {
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
                 <div class="stat-card" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">
                     <div class="stat-number" style="font-size: 1.50rem;">${escapeHtml(currentAccesorioName.length > 22 ? currentAccesorioName.substring(0, 22) + '...' : currentAccesorioName)}</div>
-                
                 </div>
                 <div class="stat-card" style="background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);">
                     <div class="stat-number">${almacenGeneralQuantity}</div>
@@ -793,16 +763,16 @@ async function searchInventarioAccesorios() {
             
             <!-- Contenido de pestañas -->
             <div id="inventarioTabRuta1" class="inventario-tab-content active-tab">
-                ${renderRutaTabAccesorios("Ruta 1", RUTAS_ACCESORIOS_CONFIG["Ruta 1"], otrasSucursales)}
+                ${renderRutaTabAccesorios("Ruta 1", RUTAS_CONFIG["Ruta 1"], otrasSucursales)}
             </div>
             <div id="inventarioTabRuta2" class="inventario-tab-content" style="display: none;">
-                ${renderRutaTabAccesorios("Ruta 2", RUTAS_ACCESORIOS_CONFIG["Ruta 2"], otrasSucursales)}
+                ${renderRutaTabAccesorios("Ruta 2", RUTAS_CONFIG["Ruta 2"], otrasSucursales)}
             </div>
             <div id="inventarioTabRuta3" class="inventario-tab-content" style="display: none;">
-                ${renderRutaTabAccesorios("Ruta 3", RUTAS_ACCESORIOS_CONFIG["Ruta 3"], otrasSucursales)}
+                ${renderRutaTabAccesorios("Ruta 3", RUTAS_CONFIG["Ruta 3"], otrasSucursales)}
             </div>
             <div id="inventarioTabRuta4" class="inventario-tab-content" style="display: none;">
-                ${renderRutaTabAccesorios("Ruta 4", RUTAS_ACCESORIOS_CONFIG["Ruta 4"], otrasSucursales)}
+                ${renderRutaTabAccesorios("Ruta 4", RUTAS_CONFIG["Ruta 4"], otrasSucursales)}
             </div>
         `;
         

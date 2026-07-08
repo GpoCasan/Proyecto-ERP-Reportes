@@ -1,38 +1,7 @@
 // ==================== MÓDULO: INVENTARIO TAE ====================
 
-// Configuración de rutas (misma que inventario.js)
-const TAE_RUTAS_CONFIG = {
-    "Ruta 1": {
-        sucursales: ["Calkini", "Halacho", "Hecelchakan", "Hunucma", "Muna", "Tenabo", "Ticul 2", "Uman"],
-        color: "#3b82f6",
-        icon: "🚚"
-    },
-    "Ruta 2": {
-        sucursales: ["Acanceh", "Chemax", "Chemax 2", "Hoctun", "Homun", "Huhi", "Kanasin", "Piste 2", "Sotuta", "Seye", "Valladolid Waldos", "Xocchel"],
-        color: "#059669",
-        icon: "🚚"
-    },
-    "Ruta 3": {
-        sucursales: ["Baca", "Buctzotz", "Conkal", "Izamal", "Motul Mercado", "Dzidzantun", "Temax", "Tixkokob", "Tizimin", "Tizimin 2"],
-        color: "#dc2626",
-        icon: "🚚"
-    },
-    "Ruta 4": {
-        sucursales: ["Dziuche", "Morelos", "Oxkutzcab 2", "Oxkutzcab 3", "Peto 2", "Teabo", "Tecoh", "Tekax", "Tekax 2", "Tekit", "Tzucacab"],
-        color: "#f97316",
-        icon: "🚚"
-    }
-};
-
-// Palabras clave para detectar Almacén General (con prefijo TAE para evitar conflictos)
-const TAE_ALMACEN_GENERAL_KEYWORDS = [
-    "almacen general", 
-    "equipos matriz", 
-    "casa matriz", 
-    "almacen matriz", 
-    "matriz",
-    "almacén general"
-];
+// NOTA: RUTAS_CONFIG y ALMACEN_GENERAL_KEYWORDS ahora vienen de config.js
+// No es necesario redeclararlas aquí
 
 // Variables globales
 let taeInventarioData = null;
@@ -212,7 +181,8 @@ function isTaeAlmacenGeneral(branchName, warehouseName) {
     const nameToCheck = (branchName || warehouseName || '').toLowerCase();
     const cleaned = nameToCheck.replace(/[^a-z0-9\sáéíóúüñ]/g, '').trim();
     
-    for (const keyword of TAE_ALMACEN_GENERAL_KEYWORDS) {
+    // Usar ALMACEN_GENERAL_KEYWORDS desde config.js
+    for (const keyword of ALMACEN_GENERAL_KEYWORDS) {
         if (cleaned.includes(keyword.toLowerCase())) {
             return true;
         }
@@ -394,7 +364,8 @@ function renderTaeSinRutaTab(stockItems, transfersMap) {
     }
     
     const sucursalesEnRuta = new Set();
-    for (const ruta of Object.values(TAE_RUTAS_CONFIG)) {
+    // Usar RUTAS_CONFIG desde config.js
+    for (const ruta of Object.values(RUTAS_CONFIG)) {
         for (const suc of ruta.sucursales) {
             sucursalesEnRuta.add(taeNormalizeText(suc));
         }
@@ -683,10 +654,9 @@ async function abrirInventarioTAE() {
         }
     });
     
-    // Evento para actualizar - USAR addEventListener DIRECTAMENTE
+    // Evento para actualizar
     const btnActualizar = document.getElementById('btnActualizarInventarioTAE');
     if (btnActualizar) {
-        // Eliminar eventos anteriores clonando
         const newBtn = btnActualizar.cloneNode(true);
         btnActualizar.parentNode.replaceChild(newBtn, btnActualizar);
         
@@ -694,7 +664,6 @@ async function abrirInventarioTAE() {
             e.preventDefault();
             console.log('🔄 [TAE INVENTARIO] Click en Actualizar');
             taeInventarioData = null;
-            // Forzar recarga
             cargarDatosInventarioTAE();
         });
         console.log('✅ [TAE INVENTARIO] Botón Actualizar configurado');
@@ -865,16 +834,16 @@ function renderInventarioTAE(stockItems, transfersMap) {
     // Contenido de las pestañas
     let contentHtml = `
         <div id="taeInventarioTabRuta1" class="tae-inventario-tab-content active-tab">
-            ${renderTaeRutaTab("Ruta 1", TAE_RUTAS_CONFIG["Ruta 1"], stockItems, transfersMap)}
+            ${renderTaeRutaTab("Ruta 1", RUTAS_CONFIG["Ruta 1"], stockItems, transfersMap)}
         </div>
         <div id="taeInventarioTabRuta2" class="tae-inventario-tab-content" style="display: none;">
-            ${renderTaeRutaTab("Ruta 2", TAE_RUTAS_CONFIG["Ruta 2"], stockItems, transfersMap)}
+            ${renderTaeRutaTab("Ruta 2", RUTAS_CONFIG["Ruta 2"], stockItems, transfersMap)}
         </div>
         <div id="taeInventarioTabRuta3" class="tae-inventario-tab-content" style="display: none;">
-            ${renderTaeRutaTab("Ruta 3", TAE_RUTAS_CONFIG["Ruta 3"], stockItems, transfersMap)}
+            ${renderTaeRutaTab("Ruta 3", RUTAS_CONFIG["Ruta 3"], stockItems, transfersMap)}
         </div>
         <div id="taeInventarioTabRuta4" class="tae-inventario-tab-content" style="display: none;">
-            ${renderTaeRutaTab("Ruta 4", TAE_RUTAS_CONFIG["Ruta 4"], stockItems, transfersMap)}
+            ${renderTaeRutaTab("Ruta 4", RUTAS_CONFIG["Ruta 4"], stockItems, transfersMap)}
         </div>
         <div id="taeInventarioTabSinRuta" class="tae-inventario-tab-content" style="display: none;">
             ${renderTaeSinRutaTab(stockItems, transfersMap)}

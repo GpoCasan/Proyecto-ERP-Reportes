@@ -6,6 +6,9 @@ let alertaTransferenciasInicializada = false;
 // Variable para almacenar los datos de las transferencias
 let cachedTransferenciasData = null;
 
+// NOTA: RUTAS_CONFIG y ALMACEN_GENERAL_KEYWORDS ahora vienen de config.js
+// No es necesario redeclararlas aquí
+
 // ==================== FUNCIÓN PRINCIPAL ====================
 
 async function verificarTransferenciasPendientes(forzar = false) {
@@ -58,8 +61,9 @@ async function verificarTransferenciasPendientes(forzar = false) {
             return;
         }
 
-        // Obtener las rutas del módulo de inventario
-        const rutasConfig = window.RUTAS_CONFIG || {
+        // Obtener las rutas desde RUTAS_CONFIG (config.js)
+        // Si por alguna razón no está disponible, usar un fallback
+        const rutasConfig = typeof RUTAS_CONFIG !== 'undefined' ? RUTAS_CONFIG : {
             "Ruta 1": { sucursales: ["Calkini", "Halacho", "Hecelchakan", "Hunucma", "Muna", "Tenabo", "Ticul 2", "Uman"], color: "#3b82f6" },
             "Ruta 2": { sucursales: ["Acanceh", "Chemax", "Chemax 2", "Hoctun", "Homun", "Huhi", "Kanasin", "Piste 2", "Sotuta", "Seye", "Valladolid Waldos", "Xocchel"], color: "#059669" },
             "Ruta 3": { sucursales: ["Baca", "Buctzotz", "Conkal", "Izamal", "Motul Mercado", "Dzidzantun", "Temax", "Tixkokob", "Tizimin", "Tizimin 2"], color: "#dc2626" },
@@ -756,3 +760,5 @@ window.verificarTransferenciasPendientes = verificarTransferenciasPendientes;
 window.cerrarModalTransferencias = cerrarModalTransferencias;
 window.cerrarDetalleTienda = cerrarDetalleTienda;
 window.abrirModalTransferencias = abrirModalTransferencias;
+
+console.log('📦 [ALERTAS TRANSFERENCIAS] Módulo cargado correctamente');

@@ -10,7 +10,7 @@ const CONFIG = {
     API_PAYJOY_LOGIN: 'https://www.payjoy.com/admin-console/api/auth/login',
     API_TAE_BALANCE: 'https://catalogs.gcasan.com/api/tae/balance',
     API_SUPPLY_COST: 'https://supply.gcasan.com/api/products',
-    API_REPORTS: 'https://reports.gcasan.com/api',  // <--- CORREGIDO: quitado '/sales/product-sales'
+    API_REPORTS: 'https://reports.gcasan.com/api',
     API_TRANSFERS: 'https://inventory.gcasan.com/api/transfers',
     API_WAREHOUSES: 'https://catalogs.gcasan.com/api/warehouses',
     API_PRODUCTS: 'https://catalogs.gcasan.com/api/products',
@@ -42,43 +42,79 @@ const CONFIG = {
         "WimoTelecom": [1110,593,594,1111,600,601,1112,595,1113,596,1114,591,1115,597,598,592,1109,599,967,968,969,970,971,972,973,974,975,976]
     }
 };
-        const TEAM_STRUCTURE = {
-            "👑 Lider A": {
-                liderId: 145,
-                liderNombre: "Guadalupe Pech",
-                miembros: [124, 132, 92, 36, 45, 59, 83, 113, 49, 109, 86, 118, 164]
-            },
-            "👑 Lider B": {
-                liderId: 141,
-                liderNombre: "Beatriz Pech",
-                miembros: [78, 121, 43, 56, 133, 115, 104, 105, 103, 110, 77, 114, 168, 172]
-            },
-            "👑 Lider C": {
-                liderId: 58,
-                liderNombre: "Rocio Tamay Xool",
-                miembros: [87, 165, 38, 51, 91, 67, 30, 116, 111, 158, 159, 163, 169, 170]
-            },
-            "👑 Lider D": {
-                liderId: 94,
-                liderNombre: "Ligia Valdez",
-                miembros: [72, 90, 85, 130, 126, 119, 106, 137, 100, 152, 35, 148, 160]
-            },
-            "👑 Lider E": {
-                liderId: 120,
-                liderNombre: "Erika Pacheco",
-                miembros: [102, 117, 60, 46, 108, 95, 127, 122, 139, 33, 125, 73, 129, 162]
-            },
-            "👑 Lider F": {
-                liderId: 52,
-                liderNombre: "Valeria Cauich",
-                miembros: [101, 123, 57, 50, 147, 144, 89, 80, 150, 156, 88, 166, 171]
-            },
-            "🔹 Equipo X": {
-                liderId: null,
-                liderNombre: "Sin Líder",
-                miembros: [134, 146]
-            }
-        };
+
+// ==================== CONFIGURACIÓN DE RUTAS (CENTRALIZADA) ====================
+const RUTAS_CONFIG = {
+    "Ruta 1": {
+        sucursales: ["Calkini", "Halacho", "Hecelchakan", "Hunucma", "Muna", "Tenabo", "Ticul 2", "Uman"],
+        color: "#3b82f6",
+        icon: "🚚"
+    },
+    "Ruta 2": {
+        sucursales: ["Acanceh", "Chemax", "Chemax 2", "Hoctun", "Homun", "Huhi", "Kanasin", "Piste 2", "Sotuta", "Seye", "Valladolid Waldos", "Xocchel"],
+        color: "#059669",
+        icon: "🚚"
+    },
+    "Ruta 3": {
+        sucursales: ["Baca", "Buctzotz", "Conkal", "Izamal", "Motul Mercado", "Dzidzantun", "Temax", "Tixkokob", "Tizimin", "Tizimin 2"],
+        color: "#dc2626",
+        icon: "🚚"
+    },
+    "Ruta 4": {
+        sucursales: ["Dziuche", "Morelos", "Oxkutzcab 2", "Oxkutzcab 3", "Peto 2", "Teabo", "Tecoh", "Tekax", "Tekax 2", "Tekit", "Tzucacab"],
+        color: "#f97316",
+        icon: "🚚"
+    }
+};
+
+// ==================== PALABRAS CLAVE PARA ALMACÉN GENERAL ====================
+const ALMACEN_GENERAL_KEYWORDS = [
+    "almacen general", 
+    "equipos matriz", 
+    "casa matriz", 
+    "almacen matriz", 
+    "matriz",
+    "almacén general"
+];
+
+const TEAM_STRUCTURE = {
+    "👑 Lider A": {
+        liderId: 145,
+        liderNombre: "Guadalupe Pech",
+        miembros: [124, 132, 92, 36, 45, 59, 83, 113, 49, 109, 86, 118, 164]
+    },
+    "👑 Lider B": {
+        liderId: 141,
+        liderNombre: "Beatriz Pech",
+        miembros: [78, 121, 43, 56, 133, 115, 104, 105, 103, 110, 77, 114, 168, 172]
+    },
+    "👑 Lider C": {
+        liderId: 58,
+        liderNombre: "Rocio Tamay Xool",
+        miembros: [87, 165, 38, 51, 91, 67, 30, 116, 111, 158, 159, 163, 169, 170]
+    },
+    "👑 Lider D": {
+        liderId: 94,
+        liderNombre: "Ligia Valdez",
+        miembros: [72, 90, 85, 130, 126, 119, 106, 137, 100, 152, 35, 148, 160]
+    },
+    "👑 Lider E": {
+        liderId: 120,
+        liderNombre: "Erika Pacheco",
+        miembros: [102, 117, 60, 46, 108, 95, 127, 122, 139, 33, 125, 73, 129, 162]
+    },
+    "👑 Lider F": {
+        liderId: 52,
+        liderNombre: "Valeria Cauich",
+        miembros: [101, 123, 57, 50, 147, 144, 89, 80, 150, 156, 88, 166, 171]
+    },
+    "🔹 Equipo X": {
+        liderId: null,
+        liderNombre: "Sin Líder",
+        miembros: [134, 146]
+    }
+};
+
 // Variables globales
 let currentPayJoyToken = null;
 let tokenExpirationTime = null;
