@@ -9,12 +9,16 @@ let currentAccesorioId = null;
 let searchTimeoutAccesorios = null;
 let currentAccesorioName = '';
 let currentStockData = [];
+let currentSalesByBranch = {};
 
 // ==================== CONFIGURACIÓN ====================
 // NOTA: RUTAS_CONFIG y ALMACEN_GENERAL_KEYWORDS ahora vienen de config.js
 // No es necesario redeclararlas aquí
 
 const ACCESORIOS_CLASSIFICATION_ID = 2;
+const FACTOR_INVENTARIO_SUGERIDO = 2; // Multiplicador para inventario sugerido (semana * 2)
+const INVENTARIO_MINIMO_SIN_VENTAS = 1; // Inventario mínimo cuando no hay ventas
+const IVA = 1.16; // Factor de IVA
 
 // ==================== FUNCIONES DE UTILERÍA ====================
 function normalizeText(text) {
@@ -143,8 +147,8 @@ async function fetchProductPrice(productId) {
     }
 }
 
-// ==================== OBTENER VENTAS DEL MES ANTERIOR ====================
-async function fetchPreviousMonthSales(productId) {
+// ==================== OBTENER VENTAS POR TIENDA DEL MES ANTERIOR ====================
+async function fetchSalesByBranch(productId) {
     try {
         const now = new Date();
         const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -152,29 +156,62 @@ async function fetchPreviousMonthSales(productId) {
         const lastDay = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0).getDate();
         const endDate = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')} 06:00:00`;
         
-        const url = `https://reports.gcasan.com/api/sales/product-sales?start_date=${startDate}&end_date=${endDate}&product_ids[]=${productId}&page=1&per_page=1`;
-        console.log(`📡 Consultando ventas mes anterior: ${url}`);
+        const url = `https://reports.gcasan.com/api/sales/product-sales?start_date=${startDate}&end_date=${endDate}&product_ids[]=${productId}&page=1&per_page=1000`;
+        console.log(`📡 Consultando ventas por tienda: ${url}`);
         
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
         });
         
         if (!response.ok) {
-            console.warn(`⚠️ Error al obtener ventas: ${response.status}`);
-            return null;
+            console.warn(`⚠️ Error al obtener ventas por tienda: ${response.status}`);
+            return {};
         }
         
         const data = await response.json();
-        console.log(`📊 Ventas mes anterior:`, data);
+        console.log(`📊 Ventas por tienda (respuesta completa):`, data);
         
-        if (data && data.total_amount !== undefined) {
-            return parseFloat(data.total_amount) || 0;
+        const salesByBranch = {};
+        let totalQuantity = 0;
+        let totalAmount = 0;
+        
+        if (data && data.data && Array.isArray(data.data)) {
+            data.data.forEach(item => {
+                const branchName = item.branch || '';
+                const quantity = parseInt(item.quantity) || 0;
+                const amount = parseFloat(item.total) || 0;
+                
+                if (branchName) {
+                    const normalized = normalizeText(branchName);
+                    
+                    if (!salesByBranch[normalized]) {
+                        salesByBranch[normalized] = {
+                            quantity: 0,
+                            amount: 0
+                        };
+                    }
+                    salesByBranch[normalized].quantity += quantity;
+                    salesByBranch[normalized].amount += amount;
+                    totalQuantity += quantity;
+                    totalAmount += amount;
+                    
+                    console.log(`   📊 ${branchName}: ${quantity} piezas ($${amount.toFixed(2)})`);
+                }
+            });
         }
-        return 0;
+        
+        console.log(`📊 Ventas por tienda procesadas:`, salesByBranch);
+        console.log(`📦 Total piezas vendidas: ${totalQuantity}`);
+        console.log(`💰 Total ventas: ${formatCurrency(totalAmount)}`);
+        
+        salesByBranch._totalQuantity = totalQuantity;
+        salesByBranch._totalAmount = totalAmount;
+        
+        return salesByBranch;
         
     } catch (error) {
-        console.error('❌ Error consultando ventas:', error);
-        return null;
+        console.error('❌ Error consultando ventas por tienda:', error);
+        return {};
     }
 }
 
@@ -401,6 +438,7 @@ function clearSelectedAccesorio() {
     }
     
     currentStockData = [];
+    currentSalesByBranch = {};
 }
 
 // ==================== CONSULTA DE INVENTARIO POR ACCESORIO ====================
@@ -441,7 +479,6 @@ function isAlmacenGeneralAccesorios(branchName, warehouseName) {
     const nameToCheck = (branchName || warehouseName || '').toLowerCase();
     const cleaned = nameToCheck.replace(/[^a-z0-9\sáéíóúüñ]/g, '').trim();
     
-    // Usar ALMACEN_GENERAL_KEYWORDS desde config.js
     for (const keyword of ALMACEN_GENERAL_KEYWORDS) {
         if (cleaned.includes(keyword.toLowerCase())) {
             console.log(`✅ Almacén General detectado: "${nameToCheck}"`);
@@ -451,7 +488,7 @@ function isAlmacenGeneralAccesorios(branchName, warehouseName) {
     return false;
 }
 
-function getInventoryBySucursalAccesorios(stockItems, sucursalNombre) {
+function getInventoryBySucursalAccesorios(stockItems, sucursalNombre, salesByBranch) {
     const sucursalLower = sucursalNombre.toLowerCase();
     const item = stockItems.find(s => {
         const branchName = (s.branch_name || '').toLowerCase();
@@ -459,32 +496,72 @@ function getInventoryBySucursalAccesorios(stockItems, sucursalNombre) {
         return branchName.includes(sucursalLower) || warehouseName.includes(sucursalLower);
     });
     
+    const quantity = item?.quantity || 0;
+    const normalizedBranch = normalizeText(sucursalNombre);
+    const salesData = salesByBranch[normalizedBranch] || { quantity: 0, amount: 0 };
+    const salesQuantity = salesData.quantity || 0;
+    
+    // Calcular inventario sugerido: (ventas / 4 semanas) * FACTOR (2)
+    let suggestedInventory = 0;
+    if (salesQuantity > 0) {
+        suggestedInventory = Math.ceil((salesQuantity / 4) * FACTOR_INVENTARIO_SUGERIDO);
+    } else {
+        // Si no tuvo ventas, inventario mínimo de 1
+        suggestedInventory = INVENTARIO_MINIMO_SIN_VENTAS;
+    }
+    
+    const difference = quantity - suggestedInventory;
+    
     return {
-        quantity: item?.quantity || 0,
-        hasStock: (item?.quantity || 0) > 0
+        quantity: quantity,
+        hasStock: quantity > 0,
+        salesQuantity: salesQuantity,
+        suggestedInventory: suggestedInventory,
+        difference: difference
     };
 }
 
-// ==================== RENDERIZADO DE TABLAS POR RUTA (MEJORADO) ====================
-function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
+// ==================== RENDERIZADO DE TABLAS POR RUTA ====================
+function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems, salesByBranch) {
     const sucursales = rutaData.sucursales;
     const color = rutaData.color;
     const icon = rutaData.icon;
     
     let sucursalesData = [];
     let totalQuantity = 0;
+    let totalSalesQuantity = 0;
+    let totalSuggested = 0;
+    let totalDifference = 0;
     
     for (const sucursal of sucursales) {
-        const inv = getInventoryBySucursalAccesorios(stockItems, sucursal);
+        const inv = getInventoryBySucursalAccesorios(stockItems, sucursal, salesByBranch);
         sucursalesData.push({
             nombre: sucursal,
             quantity: inv.quantity,
-            hasStock: inv.hasStock
+            hasStock: inv.hasStock,
+            salesQuantity: inv.salesQuantity,
+            suggestedInventory: inv.suggestedInventory,
+            difference: inv.difference
         });
         totalQuantity += inv.quantity;
+        totalSalesQuantity += inv.salesQuantity;
+        totalSuggested += inv.suggestedInventory;
+        totalDifference += inv.difference;
     }
     
     const sinStockCount = sucursalesData.filter(s => !s.hasStock).length;
+    
+    // Función para obtener el color y formato de la diferencia
+    const getDifferenceDisplay = (diff) => {
+        if (diff < 0) {
+            return `<span style="color: #dc2626; font-weight: bold;">${diff}</span>`;
+        } else if (diff >= 4) {
+            return `<span style="color: #059669; font-weight: bold;">+${diff}</span>`;
+        } else if (diff >= 0 && diff <= 3) {
+            return `<span style="color: #2563eb; font-weight: bold;">+${diff}</span>`;
+        }
+        return `<span style="color: #94a3b8;">${diff}</span>`;
+    };
     
     return `
         <div style="background: white; border-radius: 12px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);">
@@ -498,6 +575,9 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
                     </div>
                     <div style="display: flex; gap: 20px; font-size: 0.9rem;">
                         <span style="font-weight: bold;">📦 ${totalQuantity}</span>
+                        <span style="font-weight: bold;">📊 ${totalSalesQuantity} pzs</span>
+                        <span style="font-weight: bold;">🎯 ${totalSuggested}</span>
+                        <span style="font-weight: bold;">📊 ${totalDifference > 0 ? '+' : ''}${totalDifference}</span>
                     </div>
                 </div>
             </div>
@@ -505,9 +585,12 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
                 <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
                     <thead style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
                         <tr>
-                            <th style="padding: 14px 16px; text-align: center; width: 60px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">#</th>
+                            <th style="padding: 14px 16px; text-align: center; width: 40px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">#</th>
                             <th style="padding: 14px 16px; text-align: left; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">🏪 Sucursal</th>
-                            <th style="padding: 14px 16px; text-align: center; width: 120px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">📦 Cantidad</th>
+                            <th style="padding: 14px 16px; text-align: center; width: 80px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">📦 Actual</th>
+                            <th style="padding: 14px 16px; text-align: center; width: 80px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">📊 Ventas (pzs)</th>
+                            <th style="padding: 14px 16px; text-align: center; width: 100px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">🎯 Sugerido</th>
+                            <th style="padding: 14px 16px; text-align: center; width: 100px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">📊 Diferencia</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -519,6 +602,11 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
                                     ${!suc.hasStock ? '<span style="margin-left: 12px; font-size: 0.75rem; color: #dc2626; font-weight: 600;">⚠️ SIN STOCK</span>' : ''}
                                 </td>
                                 <td style="padding: 12px 16px; text-align: center; font-weight: bold; color: ${suc.hasStock ? '#059669' : '#94a3b8'}; font-size: 1.05rem;">${suc.quantity}</td>
+                                <td style="padding: 12px 16px; text-align: center; font-weight: 500; color: ${suc.salesQuantity > 0 ? '#2563eb' : '#94a3b8'}; font-size: 0.95rem;">${suc.salesQuantity}</td>
+                                <td style="padding: 12px 16px; text-align: center; font-weight: bold; color: ${suc.suggestedInventory > 0 ? '#7c3aed' : '#94a3b8'}; font-size: 0.95rem;">${suc.suggestedInventory > 0 ? suc.suggestedInventory : '—'}</td>
+                                <td style="padding: 12px 16px; text-align: center; font-size: 1rem;">
+                                    ${getDifferenceDisplay(suc.difference)}
+                                </td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -526,65 +614,9 @@ function renderRutaTabAccesorios(rutaNombre, rutaData, stockItems) {
                         <tr style="font-weight: bold;">
                             <td colspan="2" style="padding: 14px 16px; text-align: right; font-size: 0.95rem; color: #1e293b;">TOTAL ${rutaNombre}:</td>
                             <td style="padding: 14px 16px; text-align: center; font-size: 1.1rem; color: ${color};">${totalQuantity}</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-    `;
-}
-
-function renderSinRutaTabAccesorios(sucursalesData) {
-    if (sucursalesData.length === 0) return '';
-    
-    let totalQuantity = 0;
-    
-    for (const suc of sucursalesData) {
-        totalQuantity += suc.quantity;
-    }
-    
-    const sinStockCount = sucursalesData.filter(s => !s.hasStock).length;
-    
-    return `
-        <div style="background: white; border-radius: 12px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);">
-            <div style="background: #64748b; color: white; padding: 14px 20px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                    <div>
-                        <span style="font-size: 1.4rem;">⚠️</span>
-                        <strong style="font-size: 1.1rem; margin-left: 10px;">Sin Ruta Asignada</strong>
-                        <span style="margin-left: 12px; font-size: 0.8rem; opacity: 0.9;">${sucursalesData.length} sucursales</span>
-                        ${sinStockCount > 0 ? `<span style="margin-left: 12px; font-size: 0.7rem; background: rgba(0,0,0,0.2); padding: 2px 12px; border-radius: 20px;">⚠️ ${sinStockCount} sin stock</span>` : ''}
-                    </div>
-                    <div style="display: flex; gap: 20px; font-size: 0.9rem;">
-                        <span style="font-weight: bold;">📦 ${totalQuantity}</span>
-                    </div>
-                </div>
-            </div>
-            <div style="padding: 0; overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
-                    <thead style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
-                        <tr>
-                            <th style="padding: 14px 16px; text-align: center; width: 60px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">#</th>
-                            <th style="padding: 14px 16px; text-align: left; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">🏪 Sucursal</th>
-                            <th style="padding: 14px 16px; text-align: center; width: 120px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">📦 Cantidad</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${sucursalesData.map((suc, idx) => `
-                            <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : (idx % 2 === 0 ? 'background-color: #fafafa;' : '')}">
-                                <td style="padding: 12px 16px; text-align: center; color: #64748b; font-size: 0.9rem;">${idx + 1}</td>
-                                <td style="padding: 12px 16px; font-weight: 500; font-size: 0.95rem;">
-                                    🏪 ${escapeHtml(suc.nombre)}
-                                    ${!suc.hasStock ? '<span style="margin-left: 12px; font-size: 0.75rem; color: #dc2626; font-weight: 600;">⚠️ SIN STOCK</span>' : ''}
-                                </td>
-                                <td style="padding: 12px 16px; text-align: center; font-weight: bold; color: ${suc.hasStock ? '#059669' : '#94a3b8'}; font-size: 1.05rem;">${suc.quantity}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                    <tfoot style="background: #f1f5f9; border-top: 2px solid #64748b;">
-                        <tr style="font-weight: bold;">
-                            <td colspan="2" style="padding: 14px 16px; text-align: right; font-size: 0.95rem; color: #1e293b;">TOTAL:</td>
-                            <td style="padding: 14px 16px; text-align: center; font-size: 1.1rem; color: #64748b;">${totalQuantity}</td>
+                            <td style="padding: 14px 16px; text-align: center; font-size: 1.1rem; color: ${color};">${totalSalesQuantity}</td>
+                            <td style="padding: 14px 16px; text-align: center; font-size: 1.1rem; color: ${color};">${totalSuggested}</td>
+                            <td style="padding: 14px 16px; text-align: center; font-size: 1.1rem; color: ${color};">${totalDifference > 0 ? '+' : ''}${totalDifference}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -610,22 +642,21 @@ async function searchInventarioAccesorios() {
     document.getElementById('inventarioAccesoriosInfoAlert').style.display = 'none';
     
     try {
-        const [stockData, cost, price, salesAmount] = await Promise.all([
+        const [stockData, cost, price, salesByBranch] = await Promise.all([
             fetchInventoryByAccesorio(currentAccesorioId),
             fetchProductCost(currentAccesorioId),
             fetchProductPrice(currentAccesorioId),
-            fetchPreviousMonthSales(currentAccesorioId)
+            fetchSalesByBranch(currentAccesorioId)
         ]);
         
         currentStockData = stockData;
+        currentSalesByBranch = salesByBranch;
         
         console.log('📊 DATOS RECIBIDOS:');
         stockData.forEach(item => {
             console.log(`   - "${item.branch_name}" (${item.warehouse_name}) -> 📦${item.quantity}`);
         });
-        console.log(`💰 Costo: ${cost}`);
-        console.log(`💰 Precio: ${price}`);
-        console.log(`📊 Ventas mes anterior: ${salesAmount}`);
+        console.log('📊 Ventas por tienda:', salesByBranch);
         
         // ========== SEPARAR ALMACÉN GENERAL ==========
         let almacenGeneralQuantity = 0;
@@ -646,62 +677,65 @@ async function searchInventarioAccesorios() {
         
         console.log(`📊 TOTAL ALMACÉN GENERAL: ${almacenGeneralQuantity}`);
         
-        // ========== ENCONTRAR SUCURSALES CON RUTA Y SIN RUTA ==========
-        const sucursalesEnRuta = new Set();
-        // Usar RUTAS_CONFIG desde config.js
-        for (const ruta of Object.values(RUTAS_CONFIG)) {
-            for (const suc of ruta.sucursales) {
-                sucursalesEnRuta.add(normalizeText(suc));
-            }
-        }
-        
-        const sucursalesSinRuta = [];
+        // ========== CALCULAR TOTALES ==========
         let totalSucursalesConRuta = 0;
-        let totalSucursalesSinRuta = 0;
+        let totalSalesQuantityConRuta = 0;
+        let totalSalesAmountConRuta = 0;
+        let totalSuggestedConRuta = 0;
+        let totalDifferenceConRuta = 0;
         
         for (const item of otrasSucursales) {
             const branchName = item.branch_name;
             if (branchName) {
                 const normalizedBranch = normalizeText(branchName);
                 const quantity = item.quantity || 0;
-                const hasStock = quantity > 0;
+                const salesData = salesByBranch[normalizedBranch] || { quantity: 0, amount: 0 };
+                const salesQuantity = salesData.quantity || 0;
+                const salesAmount = salesData.amount || 0;
                 
-                if (hasStock) {
-                    if (sucursalesEnRuta.has(normalizedBranch)) {
-                        totalSucursalesConRuta += quantity;
-                        console.log(`✅ Con ruta: ${branchName} -> +${quantity}`);
-                    } else {
-                        const existing = sucursalesSinRuta.find(s => s.nombre === branchName);
-                        if (existing) {
-                            existing.quantity += quantity;
-                            existing.hasStock = true;
-                        } else {
-                            sucursalesSinRuta.push({
-                                nombre: branchName,
-                                quantity: quantity,
-                                hasStock: true
-                            });
-                        }
-                        totalSucursalesSinRuta += quantity;
-                        console.log(`⚠️ Sin ruta: ${branchName} -> +${quantity}`);
-                    }
+                let suggestedInventory = 0;
+                if (salesQuantity > 0) {
+                    suggestedInventory = Math.ceil((salesQuantity / 4) * FACTOR_INVENTARIO_SUGERIDO);
+                } else {
+                    suggestedInventory = INVENTARIO_MINIMO_SIN_VENTAS;
                 }
+                
+                totalSucursalesConRuta += quantity;
+                totalSalesQuantityConRuta += salesQuantity;
+                totalSalesAmountConRuta += salesAmount;
+                totalSuggestedConRuta += suggestedInventory;
+                totalDifferenceConRuta += (quantity - suggestedInventory);
             }
         }
         
-        console.log(`📊 Sucursales con ruta: ${totalSucursalesConRuta}`);
-        console.log(`📊 Sucursales sin ruta: ${totalSucursalesSinRuta}`);
+        const inventarioTotal = almacenGeneralQuantity + totalSucursalesConRuta;
+        const totalSalesQuantity = salesByBranch._totalQuantity || 0;
+        const totalSalesAmount = salesByBranch._totalAmount || 0;
         
-        // ========== CALCULAR TOTALES ==========
-        const inventarioTotal = almacenGeneralQuantity + totalSucursalesConRuta + totalSucursalesSinRuta;
-        
-        // ========== CALCULAR MARKUP Y PIEZAS VENDIDAS ==========
-        const priceWithIVA = price ? price * 1.16 : null;
+        // ========== CALCULAR MARKUP, UTILIDAD Y PIEZAS VENDIDAS ==========
         const markup = (price && cost && price > 0) ? ((price - cost) / price) * 100 : null;
-        let piecesSold = null;
-        if (salesAmount !== null && salesAmount !== undefined && priceWithIVA && priceWithIVA > 0) {
-            piecesSold = salesAmount / priceWithIVA;
-        }
+        
+        // === CÁLCULO CORREGIDO DE UTILIDAD ===
+        // 1. Quitar IVA a las ventas totales
+        const ventasSinIVA = totalSalesAmount / IVA;
+        
+        // 2. Calcular piezas vendidas (usando precio sin IVA)
+        const precioSinIVA = price || 0;
+        const piezasVendidas = precioSinIVA > 0 ? ventasSinIVA / precioSinIVA : 0;
+        
+        // 3. Utilidad por pieza (sin IVA)
+        const utilidadPorPieza = (price && cost && price > 0) ? (price - cost) : 0;
+        
+        // 4. Utilidad total (sin IVA)
+        const utilidadTotal = utilidadPorPieza * piezasVendidas;
+        
+        console.log('📊 CÁLCULO DE UTILIDAD:');
+        console.log(`   Ventas totales (con IVA): ${formatCurrency(totalSalesAmount)}`);
+        console.log(`   Ventas totales (sin IVA): ${formatCurrency(ventasSinIVA)}`);
+        console.log(`   Precio unitario (sin IVA): ${formatCurrency(precioSinIVA)}`);
+        console.log(`   Piezas vendidas: ${piezasVendidas.toFixed(2)}`);
+        console.log(`   Utilidad por pieza: ${formatCurrency(utilidadPorPieza)}`);
+        console.log(`   Utilidad total: ${formatCurrency(utilidadTotal)}`);
         
         // ========== CONSTRUIR HTML ==========
         let resultsHtml = `
@@ -718,25 +752,30 @@ async function searchInventarioAccesorios() {
                     <div class="stat-number">${totalSucursalesConRuta}</div>
                     <div class="stat-label">📦 Sucursales</div>
                 </div>
-                ${totalSucursalesSinRuta > 0 ? `
-                <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);">
-                    <div class="stat-number">${totalSucursalesSinRuta}</div>
-                    <div class="stat-label">⚠️ Sin Ruta</div>
-                </div>
-                ` : ''}
                 <div class="stat-card" style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);">
                     <div class="stat-number">${inventarioTotal}</div>
                     <div class="stat-label">📊 INVENTARIO TOTAL</div>
                 </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);">
+                    <div class="stat-number" style="font-size: 1.1rem;">${totalSalesQuantity}</div>
+                    <div class="stat-label">📊 Ventas (pzs mes ant.)</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #059669 0%, #34d399 100%);">
+                    <div class="stat-number" style="font-size: 1.1rem;">${formatCurrency(totalSalesAmount)}</div>
+                    <div class="stat-label">💰 Ventas ($ mes ant.)</div>
+                    <div style="font-size: 0.7rem; opacity: 0.9; margin-top: 2px;">
+                        Utilidad: ${formatCurrency(utilidadTotal)}
+                    </div>
+                </div>
             </div>
             
-            <!-- Tarjetas de costo, precio, markup y piezas vendidas -->
+            <!-- Tarjetas de costo, precio, markup -->
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px;">
                 <div class="stat-card" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);">
                     <div class="stat-number" style="font-size: 1.1rem;">${cost !== null && cost !== undefined ? formatCurrency(cost) : 'N/D'}</div>
                     <div class="stat-label">💰 Costo (sin IVA)</div>
                 </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #059669 0%, #34d399 100%);">
+                <div class="stat-card" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">
                     <div class="stat-number" style="font-size: 1.1rem;">${price !== null && price !== undefined ? formatCurrency(price) : 'N/D'}</div>
                     <div class="stat-label">🏷️ Precio Venta (sin IVA)</div>
                 </div>
@@ -745,44 +784,30 @@ async function searchInventarioAccesorios() {
                     <div class="stat-label">📈 Markup</div>
                     ${markup !== null ? `<div style="font-size: 0.6rem; opacity: 0.8;">${markup >= 20 ? '✅ Buen margen' : markup >= 10 ? '⚠️ Margen medio' : '🔴 Margen bajo'}</div>` : ''}
                 </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);">
-                    <div class="stat-number" style="font-size: 1.1rem;">${piecesSold !== null && piecesSold !== undefined ? Math.round(piecesSold) : 'N/D'}</div>
-                    <div class="stat-label">📦 Piezas vendidas (mes anterior)</div>
-                    ${piecesSold !== null && piecesSold !== undefined && salesAmount ? `<div style="font-size: 0.6rem; opacity: 0.8;">Ventas: ${formatCurrency(salesAmount)}</div>` : ''}
-                </div>
             </div>
             
-            <!-- Pestañas -->
+            <!-- Pestañas de Rutas -->
             <div style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; flex-wrap: wrap;">
                 <button class="inventario-tab-button active" data-tab="ruta1">🚚 Ruta 1</button>
                 <button class="inventario-tab-button" data-tab="ruta2">🚚 Ruta 2</button>
                 <button class="inventario-tab-button" data-tab="ruta3">🚚 Ruta 3</button>
                 <button class="inventario-tab-button" data-tab="ruta4">🚚 Ruta 4</button>
-                ${sucursalesSinRuta.length > 0 ? '<button class="inventario-tab-button" data-tab="sinruta">⚠️ Sin Ruta</button>' : ''}
             </div>
             
             <!-- Contenido de pestañas -->
             <div id="inventarioTabRuta1" class="inventario-tab-content active-tab">
-                ${renderRutaTabAccesorios("Ruta 1", RUTAS_CONFIG["Ruta 1"], otrasSucursales)}
+                ${renderRutaTabAccesorios("Ruta 1", RUTAS_CONFIG["Ruta 1"], otrasSucursales, salesByBranch)}
             </div>
             <div id="inventarioTabRuta2" class="inventario-tab-content" style="display: none;">
-                ${renderRutaTabAccesorios("Ruta 2", RUTAS_CONFIG["Ruta 2"], otrasSucursales)}
+                ${renderRutaTabAccesorios("Ruta 2", RUTAS_CONFIG["Ruta 2"], otrasSucursales, salesByBranch)}
             </div>
             <div id="inventarioTabRuta3" class="inventario-tab-content" style="display: none;">
-                ${renderRutaTabAccesorios("Ruta 3", RUTAS_CONFIG["Ruta 3"], otrasSucursales)}
+                ${renderRutaTabAccesorios("Ruta 3", RUTAS_CONFIG["Ruta 3"], otrasSucursales, salesByBranch)}
             </div>
             <div id="inventarioTabRuta4" class="inventario-tab-content" style="display: none;">
-                ${renderRutaTabAccesorios("Ruta 4", RUTAS_CONFIG["Ruta 4"], otrasSucursales)}
+                ${renderRutaTabAccesorios("Ruta 4", RUTAS_CONFIG["Ruta 4"], otrasSucursales, salesByBranch)}
             </div>
         `;
-        
-        if (sucursalesSinRuta.length > 0) {
-            resultsHtml += `
-                <div id="inventarioTabSinRuta" class="inventario-tab-content" style="display: none;">
-                    ${renderSinRutaTabAccesorios(sucursalesSinRuta)}
-                </div>
-            `;
-        }
         
         resultsHtml += `
             <div style="display: flex; justify-content: flex-end; margin-top: 20px; gap: 10px;">
@@ -842,13 +867,7 @@ function handleTabClickAccesorios(e) {
         content.style.display = 'none';
     });
     
-    let targetId = '';
-    if (tabId === 'sinruta') {
-        targetId = 'inventarioTabSinRuta';
-    } else {
-        targetId = `inventarioTab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`;
-    }
-    
+    const targetId = `inventarioTab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`;
     const targetContent = document.getElementById(targetId);
     if (targetContent) {
         targetContent.style.display = 'block';
@@ -875,9 +894,11 @@ function exportAccesoriosToExcel() {
         excelData.push(['INVENTARIO DE ACCESORIOS']);
         excelData.push(['Producto:', currentAccesorioName]);
         excelData.push(['Fecha de consulta:', new Date().toLocaleString()]);
+        excelData.push(['Factor de inventario sugerido:', FACTOR_INVENTARIO_SUGERIDO + 'x (ventas semanales)']);
+        excelData.push(['Mínimo sin ventas:', INVENTARIO_MINIMO_SIN_VENTAS + ' pieza']);
         excelData.push([]);
         
-        excelData.push(['#', 'Sucursal', 'Almacén', 'Cantidad']);
+        excelData.push(['#', 'Sucursal', 'Almacén', 'Cantidad Actual', 'Ventas (pzs)', 'Inventario Sugerido', 'Diferencia']);
         
         const sortedData = [...filteredData].sort((a, b) => {
             const branchA = (a.branch_name || '').toLowerCase();
@@ -888,21 +909,44 @@ function exportAccesoriosToExcel() {
         });
         
         let totalQty = 0;
+        let totalSalesQty = 0;
+        let totalSuggested = 0;
+        let totalDiff = 0;
         
         sortedData.forEach((item, index) => {
             const qty = item.quantity || 0;
             totalQty += qty;
             
+            const branchName = item.branch_name || 'Sin sucursal';
+            const normalizedBranch = normalizeText(branchName);
+            const salesData = currentSalesByBranch[normalizedBranch] || { quantity: 0, amount: 0 };
+            const salesQuantity = salesData.quantity || 0;
+            totalSalesQty += salesQuantity;
+            
+            let suggestedInventory = 0;
+            if (salesQuantity > 0) {
+                suggestedInventory = Math.ceil((salesQuantity / 4) * FACTOR_INVENTARIO_SUGERIDO);
+            } else {
+                suggestedInventory = INVENTARIO_MINIMO_SIN_VENTAS;
+            }
+            totalSuggested += suggestedInventory;
+            
+            const difference = qty - suggestedInventory;
+            totalDiff += difference;
+            
             excelData.push([
                 index + 1,
-                item.branch_name || 'Sin sucursal',
+                branchName,
                 item.warehouse_name || 'Sin almacén',
-                qty
+                qty,
+                salesQuantity,
+                suggestedInventory,
+                difference
             ]);
         });
         
         excelData.push([]);
-        excelData.push(['', '', 'TOTAL:', totalQty]);
+        excelData.push(['', '', 'TOTAL:', totalQty, totalSalesQty, totalSuggested, totalDiff]);
         
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(excelData);
@@ -911,6 +955,9 @@ function exportAccesoriosToExcel() {
             { wch: 5 },
             { wch: 30 },
             { wch: 30 },
+            { wch: 12 },
+            { wch: 12 },
+            { wch: 15 },
             { wch: 12 }
         ];
         
