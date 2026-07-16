@@ -248,7 +248,9 @@ async function loadAccesoriosCatalog() {
         let currentPage = 1;
         let lastPage = 1;
         
-        const firstUrl = `${CONFIG.API_PRODUCTS}?page=1&per_page=100&classification_id=${ACCESORIOS_CLASSIFICATION_ID}`;
+        // Obtener TODOS los productos y filtrar en cliente
+        const firstUrl = `${CONFIG.API_PRODUCTS}?page=1&per_page=100`;
+        console.log('📡 Consultando todos los productos...');
         
         const response = await fetch(firstUrl, {
             headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
@@ -267,7 +269,7 @@ async function loadAccesoriosCatalog() {
         for (let page = 2; page <= lastPage; page++) {
             await delay(300);
             
-            const url = `${CONFIG.API_PRODUCTS}?page=${page}&per_page=100&classification_id=${ACCESORIOS_CLASSIFICATION_ID}`;
+            const url = `${CONFIG.API_PRODUCTS}?page=${page}&per_page=100`;
             const pageResponse = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
             });
@@ -280,11 +282,30 @@ async function loadAccesoriosCatalog() {
             
             if (searchInput) {
                 const percent = Math.round((page / lastPage) * 100);
-                searchInput.placeholder = `Cargando... ${percent}% (${allProducts.length} accesorios)`;
+                searchInput.placeholder = `Cargando... ${percent}% (${allProducts.length} productos)`;
             }
         }
         
-        allProducts = allProducts.filter(p => p && p.id && p.name && p.name !== 'null' && p.name !== 'undefined');
+        console.log(`📊 Total productos obtenidos: ${allProducts.length}`);
+        
+        // FILTRO ESTRICTO: Solo classification.id === 2
+        allProducts = allProducts.filter(p => {
+            // Validación básica
+            if (!p || !p.id || !p.name || p.name === 'null' || p.name === 'undefined') {
+                return false;
+            }
+            
+            // Verificar classification.id
+            const classificationId = p.classification?.id || p.classification_id;
+            if (classificationId === ACCESORIOS_CLASSIFICATION_ID) {
+                return true;
+            }
+            
+            return false;
+        });
+        
+        console.log(`✅ Accesorios encontrados: ${allProducts.length}`);
+        
         allProducts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         
         accesoriosCache = allProducts;
@@ -298,7 +319,13 @@ async function loadAccesoriosCatalog() {
         }
         
         if (infoAlert) {
-            infoAlert.innerHTML = `✅ ${accesoriosCache.length} accesorios disponibles`;
+            if (accesoriosCache.length === 0) {
+                infoAlert.innerHTML = `⚠️ No se encontraron accesorios (classification_id=${ACCESORIOS_CLASSIFICATION_ID})`;
+                infoAlert.style.background = '#fef2f2';
+                infoAlert.style.color = '#dc2626';
+            } else {
+                infoAlert.innerHTML = `✅ ${accesoriosCache.length} accesorios disponibles`;
+            }
             setTimeout(() => {
                 if (infoAlert) infoAlert.style.display = 'none';
             }, 3000);

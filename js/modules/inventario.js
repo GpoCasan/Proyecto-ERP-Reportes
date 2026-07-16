@@ -8,6 +8,7 @@ let searchTimeout = null;
 let currentProductName = '';
 let currentProductBarcode = '';
 let stockDataGlobal = []; // Almacenar datos de stock para usar en el modal
+let almacenGeneralWarehouseIds = []; // Almacenar los warehouse_ids del almacén general
 
 // ==================== CONFIGURACIÓN DE RUTAS (USAR LA GLOBAL) ====================
 // NOTA: RUTAS_CONFIG y ALMACEN_GENERAL_KEYWORDS ahora vienen de config.js
@@ -271,6 +272,7 @@ function clearSelectedProduct() {
     currentProductName = '';
     currentProductBarcode = '';
     stockDataGlobal = [];
+    almacenGeneralWarehouseIds = [];
     
     const searchInput = document.getElementById('productoSearchInput');
     if (searchInput) {
@@ -369,6 +371,33 @@ function getInventoryBySucursal(stockItems, sucursalNombre) {
 // ==================== FUNCIONES PARA OBTENER IMEIs POR ALMACÉN ====================
 
 /**
+ * Obtiene los IMEIs de un producto en uno o varios warehouses
+ */
+async function fetchSeriesByProductAndWarehouses(productId, warehouseIds) {
+    try {
+        // Si es un solo warehouse, usar la URL con parámetro
+        if (Array.isArray(warehouseIds) && warehouseIds.length === 1) {
+            return await fetchSeriesByProductAndWarehouse(productId, warehouseIds[0]);
+        }
+        
+        // Si son múltiples warehouses, obtener todos y combinar
+        let allResults = [];
+        const ids = Array.isArray(warehouseIds) ? warehouseIds : [warehouseIds];
+        
+        for (const id of ids) {
+            const result = await fetchSeriesByProductAndWarehouse(productId, id);
+            allResults = allResults.concat(result);
+            await delay(100);
+        }
+        
+        return allResults;
+    } catch (error) {
+        console.error('❌ Error obteniendo IMEIs:', error);
+        return [];
+    }
+}
+
+/**
  * Obtiene los IMEIs de un producto en un warehouse específico
  */
 async function fetchSeriesByProductAndWarehouse(productId, warehouseId) {
@@ -406,10 +435,10 @@ async function fetchSeriesByProductAndWarehouse(productId, warehouseId) {
             }
         }
         
-        console.log('📊 IMEIs encontrados para warehouse:', result.length);
+        console.log(`📊 IMEIs encontrados para warehouse ${warehouseId}:`, result.length);
         return result;
     } catch (error) {
-        console.error('❌ Error obteniendo IMEIs:', error);
+        console.error('❌ Error obteniendo IMEIs para warehouse:', warehouseId, error);
         return [];
     }
 }
@@ -480,12 +509,40 @@ function getPurchaseDate(spec) {
 // ==================== MODAL DE IMEIs ====================
 
 /**
- * Abre el modal con los IMEIs de una tienda
+ * Abre el modal con los IMEIs de una tienda o almacén general
  */
-async function openImeiModal(sucursalNombre, warehouseId) {
+async function openImeiModal(sucursalNombre, warehouseIds, isAlmacenGeneral = false) {
     if (!currentProductId) {
         alert('❌ No hay producto seleccionado');
         return;
+    }
+    
+    // Si es almacén general y no se pasaron warehouseIds, usar los guardados
+    if (isAlmacenGeneral && (!warehouseIds || warehouseIds.length === 0)) {
+        warehouseIds = almacenGeneralWarehouseIds;
+    }
+    
+    // Si no hay warehouseIds, intentar obtenerlos del stockDataGlobal
+    if (!warehouseIds || warehouseIds.length === 0) {
+        // Buscar en stockDataGlobal por el nombre de la sucursal
+        const items = stockDataGlobal.filter(item => {
+            const branchName = (item.branch_name || '').toLowerCase();
+            const warehouseName = (item.warehouse_name || '').toLowerCase();
+            const searchName = sucursalNombre.toLowerCase();
+            return branchName.includes(searchName) || warehouseName.includes(searchName);
+        });
+        
+        warehouseIds = items.map(item => item.warehouse_id).filter(id => id);
+        
+        if (warehouseIds.length === 0) {
+            alert('❌ No se encontró información de almacén para esta ubicación');
+            return;
+        }
+    }
+    
+    // Asegurar que warehouseIds sea un array
+    if (!Array.isArray(warehouseIds)) {
+        warehouseIds = [warehouseIds];
     }
     
     // Mostrar loading en el modal
@@ -498,25 +555,26 @@ async function openImeiModal(sucursalNombre, warehouseId) {
         return;
     }
     
-    title.textContent = `📱 IMEIs - ${sucursalNombre}`;
+    const displayName = isAlmacenGeneral ? '🏭 Almacén General' : sucursalNombre;
+    title.textContent = `📱 IMEIs - ${displayName}`;
     body.innerHTML = `
         <div style="text-align: center; padding: 40px;">
             <div class="loading-spinner" style="display: inline-block; width: 40px; height: 40px;"></div>
-            <p style="margin-top: 16px; color: #64748b;">⏳ Cargando IMEIs...</p>
+            <p style="margin-top: 16px; color: #64748b;">⏳ Cargando IMEIs (${warehouseIds.length} almacenes)...</p>
         </div>
     `;
     
     modal.style.display = 'flex';
     
     try {
-        // Obtener IMEIs del warehouse
-        const specs = await fetchSeriesByProductAndWarehouse(currentProductId, warehouseId);
+        // Obtener IMEIs de todos los warehouses
+        const specs = await fetchSeriesByProductAndWarehouses(currentProductId, warehouseIds);
         
         if (!specs || specs.length === 0) {
             body.innerHTML = `
                 <div style="text-align: center; padding: 40px;">
                     <div style="font-size: 48px;">📭</div>
-                    <p style="margin-top: 16px; color: #64748b;">No se encontraron IMEIs en esta tienda</p>
+                    <p style="margin-top: 16px; color: #64748b;">No se encontraron IMEIs en ${displayName}</p>
                 </div>
             `;
             return;
@@ -527,6 +585,7 @@ async function openImeiModal(sucursalNombre, warehouseId) {
             <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div>
                     <strong style="font-size: 0.9rem;">Total: ${specs.length} IMEIs</strong>
+                    ${warehouseIds.length > 1 ? `<span style="margin-left: 10px; font-size: 0.7rem; color: #64748b;">(${warehouseIds.length} almacenes)</span>` : ''}
                 </div>
                 <button onclick="exportImeiModalToCSV()" style="
                     background: linear-gradient(135deg, #1e7e34, #28a745);
@@ -592,7 +651,7 @@ async function openImeiModal(sucursalNombre, warehouseId) {
         // Guardar los specs para exportar desde el modal
         window._imeiModalData = {
             specs: specs,
-            sucursal: sucursalNombre,
+            sucursal: displayName,
             productName: currentProductName
         };
         
@@ -630,7 +689,7 @@ function exportImeiModalToCSV() {
     
     let csv = '\uFEFF';
     csv += `"Producto","${data.productName}"\n`;
-    csv += `"Sucursal","${data.sucursal}"\n`;
+    csv += `"Ubicación","${data.sucursal}"\n`;
     csv += `"Total IMEIs",${data.specs.length}\n\n`;
     csv += '"#","IMEI","Fecha de ingreso","Fecha de compra","Status"\n';
     
@@ -717,7 +776,7 @@ function renderRutaTab(rutaNombre, rutaData, stockItems) {
                         ${sucursalesData.map((suc, idx) => `
                             <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : 'cursor: pointer;'} ${suc.hasStock ? 'class="clickable-row"' : ''}" 
                                 ${suc.hasStock ? `onclick="openImeiModal('${escapeHtml(suc.nombre)}', ${suc.warehouseId})"` : ''}
-                                ${suc.hasStock ? `title="Haz clic para ver los IMEIs"` : ''}>
+                                ${suc.hasStock ? `title=" "` : ''}>
                                 <td style="padding: 10px; text-align: center;">${idx + 1}</td>
                                 <td style="padding: 10px; font-weight: 500;">
                                     🏪 ${escapeHtml(suc.nombre)}
@@ -860,6 +919,7 @@ async function searchInventario() {
         let almacenGeneralQuantity = 0;
         let almacenGeneralTransfer = 0;
         const otrasSucursales = [];
+        const almacenGeneralIds = [];
         
         for (const item of stockData) {
             const branchName = item.branch_name || '';
@@ -868,12 +928,19 @@ async function searchInventario() {
             if (isAlmacenGeneral(branchName, warehouseName)) {
                 almacenGeneralQuantity += item.quantity || 0;
                 almacenGeneralTransfer += item.transfer_quantity || 0;
-                console.log(`🏭 ALMACÉN GENERAL: +${item.quantity} (${branchName})`);
+                if (item.warehouse_id) {
+                    almacenGeneralIds.push(item.warehouse_id);
+                }
+                console.log(`🏭 ALMACÉN GENERAL: +${item.quantity} (${branchName}) warehouse_id: ${item.warehouse_id}`);
             } else {
                 otrasSucursales.push(item);
                 console.log(`📦 Otra: ${branchName} -> +${item.quantity} (warehouse_id: ${item.warehouse_id})`);
             }
         }
+        
+        // Guardar los warehouse_ids del almacén general para usarlos en el modal
+        almacenGeneralWarehouseIds = [...new Set(almacenGeneralIds)]; // Eliminar duplicados
+        console.log(`📊 ALMACÉN GENERAL: ${almacenGeneralWarehouseIds.length} warehouses encontrados:`, almacenGeneralWarehouseIds);
         
         console.log(`📊 TOTAL ALMACÉN GENERAL: ${almacenGeneralQuantity} + ${almacenGeneralTransfer} en tránsito`);
         
@@ -899,7 +966,11 @@ async function searchInventario() {
                         existing.transfer += item.transfer_quantity || 0;
                         existing.total = existing.quantity + existing.transfer;
                         existing.hasStock = true;
-                        // Mantener el warehouseId para el modal
+                        // Guardar warehouse_id para el modal
+                        if (item.warehouse_id) {
+                            existing.warehouseIds = existing.warehouseIds || [];
+                            existing.warehouseIds.push(item.warehouse_id);
+                        }
                     } else {
                         sucursalesSinRuta.push({
                             nombre: branchName,
@@ -907,7 +978,8 @@ async function searchInventario() {
                             transfer: item.transfer_quantity || 0,
                             total: (item.quantity || 0) + (item.transfer_quantity || 0),
                             hasStock: true,
-                            warehouseId: item.warehouse_id
+                            warehouseId: item.warehouse_id,
+                            warehouseIds: item.warehouse_id ? [item.warehouse_id] : []
                         });
                     }
                 }
@@ -935,6 +1007,13 @@ async function searchInventario() {
         
         const totalGeneral = totalGeneralQuantity + totalGeneralTransfer;
         
+        // Determinar si el almacén general tiene stock para hacerlo clickeable
+        const hasAlmacenGeneralStock = almacenGeneralQuantity > 0 || almacenGeneralTransfer > 0;
+        const almacenGeneralClickAttr = hasAlmacenGeneralStock && almacenGeneralWarehouseIds.length > 0 
+            ? `onclick="openImeiModal('Almacén General', ${JSON.stringify(almacenGeneralWarehouseIds)}, true)" style="cursor: pointer;" title="Haz clic para ver los IMEIs del Almacén General"`
+            : '';
+        const almacenGeneralIcon = hasAlmacenGeneralStock ? '📱' : '—';
+        
         // ========== CONSTRUIR HTML ==========
         let resultsHtml = `
             <!-- Tarjetas de resumen -->
@@ -943,10 +1022,12 @@ async function searchInventario() {
                     <div class="stat-number" style="font-size: 0.75rem;">${escapeHtml(currentProductName.length > 30 ? currentProductName.substring(0, 30) + '...' : currentProductName)}</div>
                     <div class="stat-label">📱 Producto</div>
                 </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">
+                <div class="stat-card almacen-general-card" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%); ${hasAlmacenGeneralStock ? 'cursor: pointer;' : ''}" 
+                    ${almacenGeneralClickAttr}>
                     <div class="stat-number">${almacenGeneralQuantity}</div>
-                    <div class="stat-label">🏭 Almacén General</div>
+                    <div class="stat-label">🏭 Almacén General ${hasAlmacenGeneralStock ? '📱' : ''}</div>
                     ${almacenGeneralTransfer > 0 ? `<div style="font-size: 0.65rem;">🚚 +${almacenGeneralTransfer} en tránsito</div>` : ''}
+                    ${hasAlmacenGeneralStock && almacenGeneralWarehouseIds.length > 0 ? `<div style="font-size: 0.55rem; opacity: 0.8;">${almacenGeneralWarehouseIds.length} almacenes • Haz clic para ver IMEIs</div>` : ''}
                 </div>
                 <div class="stat-card" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
                     <div class="stat-number">${totalGeneralQuantity}</div>
@@ -1536,6 +1617,14 @@ function crearModalIMEI() {
             .clickable-row td:last-child {
                 color: #3b82f6;
             }
+            .almacen-general-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3);
+                transition: all 0.3s ease;
+            }
+            .almacen-general-card {
+                transition: all 0.3s ease;
+            }
         </style>
     `;
     
@@ -1588,6 +1677,14 @@ const inventarioStyles = `
     .clickable-row td:last-child {
         color: #3b82f6;
     }
+    .almacen-general-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3);
+        transition: all 0.3s ease;
+    }
+    .almacen-general-card {
+        transition: all 0.3s ease;
+    }
 `;
 
 if (!document.querySelector('#inventario-styles')) {
@@ -1618,4 +1715,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-console.log('🔄 Módulo de inventario con exportación de IMEIs a XLS y modal por tienda cargado');
+console.log('🔄 Módulo de inventario con exportación de IMEIs a XLS y modal por tienda/almacén general cargado');
