@@ -350,13 +350,71 @@ function isAlmacenGeneral(branchName, warehouseName) {
     return false;
 }
 
+// ==================== FUNCIÓN MEJORADA: getInventoryBySucursal ====================
 function getInventoryBySucursal(stockItems, sucursalNombre) {
-    const sucursalLower = sucursalNombre.toLowerCase();
-    const item = stockItems.find(s => {
-        const branchName = (s.branch_name || '').toLowerCase();
-        const warehouseName = (s.warehouse_name || '').toLowerCase();
-        return branchName.includes(sucursalLower) || warehouseName.includes(sucursalLower);
+    if (!stockItems || stockItems.length === 0) {
+        return {
+            quantity: 0,
+            transfer_quantity: 0,
+            total: 0,
+            hasStock: false,
+            warehouseId: null,
+            stockItem: null
+        };
+    }
+    
+    const searchName = sucursalNombre.toLowerCase().trim();
+    
+    // 1. Coincidencia exacta (case insensitive)
+    let item = stockItems.find(s => {
+        const branchName = (s.branch_name || '').toLowerCase().trim();
+        const warehouseName = (s.warehouse_name || '').toLowerCase().trim();
+        return branchName === searchName || warehouseName === searchName;
     });
+    
+    // 2. Si no hay coincidencia exacta, intentar con normalización
+    if (!item) {
+        const normalizedSearch = normalizeText(sucursalNombre);
+        item = stockItems.find(s => {
+            const branchName = normalizeText(s.branch_name || '');
+            const warehouseName = normalizeText(s.warehouse_name || '');
+            return branchName === normalizedSearch || warehouseName === normalizedSearch;
+        });
+    }
+    
+    // 3. Si aún no hay, buscar coincidencia exacta con el nombre completo
+    if (!item) {
+        const exactMatches = stockItems.filter(s => {
+            const branchName = (s.branch_name || '').toLowerCase().trim();
+            const warehouseName = (s.warehouse_name || '').toLowerCase().trim();
+            return branchName === searchName || warehouseName === searchName;
+        });
+        if (exactMatches.length === 1) {
+            item = exactMatches[0];
+        } else if (exactMatches.length > 1) {
+            // Si hay múltiples coincidencias, usar la que tenga el nombre más corto (probablemente la original)
+            const sorted = [...exactMatches].sort((a, b) => {
+                const aLen = (a.branch_name || '').length;
+                const bLen = (b.branch_name || '').length;
+                return aLen - bLen;
+            });
+            // Verificar que la primera coincidencia tenga exactamente el nombre buscado
+            if (sorted[0] && (sorted[0].branch_name || '').toLowerCase().trim() === searchName) {
+                item = sorted[0];
+            }
+        }
+    }
+    
+    // 4. Último recurso: buscar que el nombre termine en el nombre buscado (para casos como "Chemax 2" no coincida con "Chemax")
+    if (!item) {
+        const exactEndMatches = stockItems.filter(s => {
+            const branchName = (s.branch_name || '').toLowerCase().trim();
+            return branchName === searchName || branchName.endsWith(' ' + searchName);
+        });
+        if (exactEndMatches.length === 1) {
+            item = exactEndMatches[0];
+        }
+    }
     
     return {
         quantity: item?.quantity || 0,
@@ -506,7 +564,7 @@ function getPurchaseDate(spec) {
     return 'N/A';
 }
 
-// ==================== MODAL DE IMEIs ====================
+// ==================== MODAL DE IMEIs (MEJORADO) ====================
 
 /**
  * Abre el modal con los IMEIs de una tienda o almacén general
@@ -522,21 +580,69 @@ async function openImeiModal(sucursalNombre, warehouseIds, isAlmacenGeneral = fa
         warehouseIds = almacenGeneralWarehouseIds;
     }
     
-    // Si no hay warehouseIds, intentar obtenerlos del stockDataGlobal
+    // Si no hay warehouseIds, obtenerlos del stockDataGlobal con coincidencia EXACTA
     if (!warehouseIds || warehouseIds.length === 0) {
-        // Buscar en stockDataGlobal por el nombre de la sucursal
-        const items = stockDataGlobal.filter(item => {
-            const branchName = (item.branch_name || '').toLowerCase();
-            const warehouseName = (item.warehouse_name || '').toLowerCase();
-            const searchName = sucursalNombre.toLowerCase();
-            return branchName.includes(searchName) || warehouseName.includes(searchName);
+        const normalizedSearch = normalizeText(sucursalNombre);
+        const searchName = sucursalNombre.toLowerCase().trim();
+        
+        // 1. Coincidencia exacta primero
+        let items = stockDataGlobal.filter(item => {
+            const branchName = (item.branch_name || '').toLowerCase().trim();
+            const warehouseName = (item.warehouse_name || '').toLowerCase().trim();
+            return branchName === searchName || warehouseName === searchName;
         });
+        
+        // 2. Si no hay, intentar con normalización
+        if (items.length === 0) {
+            items = stockDataGlobal.filter(item => {
+                const branchName = normalizeText(item.branch_name || '');
+                const warehouseName = normalizeText(item.warehouse_name || '');
+                return branchName === normalizedSearch || warehouseName === normalizedSearch;
+            });
+        }
+        
+        // 3. Si aún no hay, buscar que el nombre termine exactamente igual
+        if (items.length === 0) {
+            items = stockDataGlobal.filter(item => {
+                const branchName = (item.branch_name || '').toLowerCase().trim();
+                return branchName === searchName || branchName.endsWith(' ' + searchName);
+            });
+        }
+        
+        // 4. Si hay múltiples coincidencias, filtrar para obtener solo la coincidencia exacta
+        if (items.length > 1) {
+            // Si hay una coincidencia exacta, usarla
+            const exactItem = items.find(item => {
+                const branchName = (item.branch_name || '').toLowerCase().trim();
+                return branchName === searchName;
+            });
+            if (exactItem) {
+                items = [exactItem];
+            } else {
+                // Si no, usar la que tenga el nombre más corto (la original)
+                items.sort((a, b) => {
+                    const aLen = (a.branch_name || '').length;
+                    const bLen = (b.branch_name || '').length;
+                    return aLen - bLen;
+                });
+                items = [items[0]];
+            }
+        }
         
         warehouseIds = items.map(item => item.warehouse_id).filter(id => id);
         
         if (warehouseIds.length === 0) {
-            alert('❌ No se encontró información de almacén para esta ubicación');
-            return;
+            // Último intento: buscar por el nombre exacto en los datos
+            const exactItem = stockDataGlobal.find(item => {
+                const branchName = (item.branch_name || '').toLowerCase().trim();
+                return branchName === searchName;
+            });
+            if (exactItem && exactItem.warehouse_id) {
+                warehouseIds = [exactItem.warehouse_id];
+            } else {
+                alert(`❌ No se encontró información de almacén para "${sucursalNombre}"`);
+                return;
+            }
         }
     }
     
@@ -544,6 +650,11 @@ async function openImeiModal(sucursalNombre, warehouseIds, isAlmacenGeneral = fa
     if (!Array.isArray(warehouseIds)) {
         warehouseIds = [warehouseIds];
     }
+    
+    // Eliminar duplicados
+    warehouseIds = [...new Set(warehouseIds)];
+    
+    console.log(`📊 Abriendo modal para "${sucursalNombre}" con warehouseIds:`, warehouseIds);
     
     // Mostrar loading en el modal
     const modal = document.getElementById('imeiModal');
@@ -575,6 +686,7 @@ async function openImeiModal(sucursalNombre, warehouseIds, isAlmacenGeneral = fa
                 <div style="text-align: center; padding: 40px;">
                     <div style="font-size: 48px;">📭</div>
                     <p style="margin-top: 16px; color: #64748b;">No se encontraron IMEIs en ${displayName}</p>
+                    <p style="font-size: 0.75rem; color: #94a3b8; margin-top: 8px;">Warehouse IDs: ${warehouseIds.join(', ')}</p>
                 </div>
             `;
             return;
@@ -652,7 +764,8 @@ async function openImeiModal(sucursalNombre, warehouseIds, isAlmacenGeneral = fa
         window._imeiModalData = {
             specs: specs,
             sucursal: displayName,
-            productName: currentProductName
+            productName: currentProductName,
+            warehouseIds: warehouseIds
         };
         
     } catch (error) {
@@ -661,6 +774,7 @@ async function openImeiModal(sucursalNombre, warehouseIds, isAlmacenGeneral = fa
             <div style="text-align: center; padding: 40px; color: #dc2626;">
                 <div style="font-size: 48px;">❌</div>
                 <p style="margin-top: 16px;">Error al cargar los IMEIs: ${error.message}</p>
+                <p style="font-size: 0.75rem; color: #94a3b8; margin-top: 8px;">Warehouse IDs: ${warehouseIds.join(', ')}</p>
             </div>
         `;
     }
@@ -715,7 +829,7 @@ function exportImeiModalToCSV() {
     }, 100);
 }
 
-// ==================== RENDERIZADO DE TABLAS ====================
+// ==================== RENDERIZADO DE TABLAS (MEJORADO) ====================
 function renderRutaTab(rutaNombre, rutaData, stockItems) {
     const sucursales = rutaData.sucursales;
     const color = rutaData.color;
@@ -727,8 +841,14 @@ function renderRutaTab(rutaNombre, rutaData, stockItems) {
     
     for (const sucursal of sucursales) {
         const inv = getInventoryBySucursal(stockItems, sucursal);
+        // Verificar que el nombre coincida exactamente
+        let nombreMostrar = sucursal;
+        if (inv.stockItem && inv.stockItem.branch_name) {
+            nombreMostrar = inv.stockItem.branch_name;
+        }
         sucursalesData.push({
-            nombre: sucursal,
+            nombre: nombreMostrar,
+            nombreOriginal: sucursal,
             quantity: inv.quantity,
             transfer: inv.transfer_quantity,
             total: inv.total,
@@ -775,8 +895,8 @@ function renderRutaTab(rutaNombre, rutaData, stockItems) {
                     <tbody>
                         ${sucursalesData.map((suc, idx) => `
                             <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : 'cursor: pointer;'} ${suc.hasStock ? 'class="clickable-row"' : ''}" 
-                                ${suc.hasStock ? `onclick="openImeiModal('${escapeHtml(suc.nombre)}', ${suc.warehouseId})"` : ''}
-                                ${suc.hasStock ? `title=" "` : ''}>
+                                ${suc.hasStock ? `onclick="openImeiModal('${escapeHtml(suc.nombreOriginal)}', [${suc.warehouseId}])"` : ''}
+                                ${suc.hasStock ? `title="Haz clic para ver los IMEIs"` : ''}>
                                 <td style="padding: 10px; text-align: center;">${idx + 1}</td>
                                 <td style="padding: 10px; font-weight: 500;">
                                     🏪 ${escapeHtml(suc.nombre)}
@@ -852,7 +972,7 @@ function renderSinRutaTab(sucursalesData) {
                     <tbody>
                         ${sucursalesData.map((suc, idx) => `
                             <tr style="border-bottom: 1px solid #e2e8f0; ${!suc.hasStock ? 'background-color: #fef2f2;' : 'cursor: pointer;'} ${suc.hasStock ? 'class="clickable-row"' : ''}" 
-                                ${suc.hasStock ? `onclick="openImeiModal('${escapeHtml(suc.nombre)}', ${suc.warehouseId})"` : ''}
+                                ${suc.hasStock ? `onclick="openImeiModal('${escapeHtml(suc.nombre)}', ${JSON.stringify(suc.warehouseIds || [suc.warehouseId])})"` : ''}
                                 ${suc.hasStock ? `title="Haz clic para ver los IMEIs"` : ''}>
                                 <td style="padding: 10px; text-align: center;">${idx + 1}</td>
                                 <td style="padding: 10px; font-weight: 500;">
