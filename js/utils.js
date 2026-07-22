@@ -191,18 +191,48 @@ async function fetchInventoryCost(imei) {
 async function fetchProductCost(productId) {
     if (!productId || productId === 0) return null;
     try {
-        const url = `${CONFIG.API_SUPPLY_COST}/${productId}/cost`;
-        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` } });
-        if (!response.ok) throw new Error();
+        const url = CONFIG.API_SUPPLY_COST + '/' + productId + '/cost';
+        const response = await fetch(url, { headers: { 'Authorization': 'Bearer ' + CONFIG.FIXED_TOKEN } });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
         const data = await response.json();
+        
+        console.log('📡 [fetchProductCost] Respuesta para ' + productId + ':', data);
+        
         let costoSinIva = 0;
-        if (data.cost) costoSinIva = parseFloat(data.cost);
-        else if (data.data?.cost) costoSinIva = parseFloat(data.data.cost);
-        else if (data.costo) costoSinIva = parseFloat(data.costo);
-        else if (typeof data === 'number') costoSinIva = data;
-        if (costoSinIva === 0) return null;
-        return { costoSinIva, costoConIva: costoSinIva * 1.16 };
-    } catch(error) { return null; }
+        
+        // Estructura esperada: { data: { cost: 1421.77 } }
+        if (data && data.data && data.data.cost !== undefined && data.data.cost !== null) {
+            costoSinIva = parseFloat(data.data.cost);
+        } 
+        // Fallback: { cost: 1421.77 }
+        else if (data && data.cost !== undefined && data.cost !== null) {
+            costoSinIva = parseFloat(data.cost);
+        }
+        // Fallback: { costo: 1421.77 }
+        else if (data && data.costo !== undefined && data.costo !== null) {
+            costoSinIva = parseFloat(data.costo);
+        }
+        // Fallback: el dato es un número directamente
+        else if (typeof data === 'number') {
+            costoSinIva = data;
+        }
+        
+        if (costoSinIva === 0 || isNaN(costoSinIva)) {
+            console.warn('⚠️ [fetchProductCost] Costo no encontrado para ' + productId, data);
+            return null;
+        }
+        
+        console.log('✅ [fetchProductCost] Costo para ' + productId + ':', costoSinIva);
+        
+        return { 
+            costoSinIva: costoSinIva, 
+            costoConIva: costoSinIva * 1.16 
+        };
+        
+    } catch(error) { 
+        console.warn('⚠️ [fetchProductCost] Error para ' + productId + ':', error);
+        return null; 
+    }
 }
 
 async function loginPayJoy() {

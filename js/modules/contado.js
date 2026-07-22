@@ -1,268 +1,589 @@
 // ==================== MÓDULO: VENTAS DE CONTADO ====================
-async function generateSalesReportAllLines() {
-    const date = document.getElementById('contadoDate').value;
+
+// Función para obtener la ruta de una sucursal
+function getRutaByBranch(branchName) {
+    if (!branchName) return 'Sin Ruta';
+    
+    var normalizedBranch = branchName.toLowerCase().trim();
+    
+    for (var rutaNombre in RUTAS_CONFIG) {
+        if (RUTAS_CONFIG.hasOwnProperty(rutaNombre)) {
+            var rutaData = RUTAS_CONFIG[rutaNombre];
+            for (var i = 0; i < rutaData.sucursales.length; i++) {
+                var sucursal = rutaData.sucursales[i];
+                if (sucursal.toLowerCase().trim() === normalizedBranch) {
+                    return rutaNombre;
+                }
+            }
+        }
+    }
+    return 'Sin Ruta';
+}
+
+// ==================== FUNCIÓN PARA OBTENER DATOS ====================
+function obtenerDatosContado() {
+    console.log('🔍 [obtenerDatosContado] Buscando datos...');
+    
+    if (window.cachedSalesData && window.cachedSalesData.results && window.cachedSalesData.results.length > 0) {
+        console.log('✅ Datos obtenidos de window.cachedSalesData:', window.cachedSalesData.results.length);
+        return { date: window.cachedSalesData.date, results: window.cachedSalesData.results, allSales: [] };
+    }
+    
+    if (window._cachedContadoFullData && window._cachedContadoFullData.results && window._cachedContadoFullData.results.length > 0) {
+        console.log('✅ Datos obtenidos de window._cachedContadoFullData:', window._cachedContadoFullData.results.length);
+        return window._cachedContadoFullData;
+    }
+    
+    try {
+        var stored = sessionStorage.getItem('contadoData');
+        if (stored) {
+            var parsed = JSON.parse(stored);
+            if (parsed && parsed.results && parsed.results.length > 0) {
+                console.log('✅ Datos obtenidos de sessionStorage:', parsed.results.length);
+                return parsed;
+            }
+        }
+    } catch(e) {}
+    
+    try {
+        var stored2 = localStorage.getItem('contadoData');
+        if (stored2) {
+            var parsed2 = JSON.parse(stored2);
+            if (parsed2 && parsed2.results && parsed2.results.length > 0) {
+                console.log('✅ Datos obtenidos de localStorage:', parsed2.results.length);
+                return parsed2;
+            }
+        }
+    } catch(e) {}
+    
+    console.log('❌ No se encontraron datos en ninguna fuente');
+    return null;
+}
+
+// ==================== FUNCIÓN PARA EXPORTAR CSV (FALLBACK) ====================
+function exportToCSV(data, filename) {
+    console.log('📊 Usando exportación CSV (fallback)...');
+    var csv = '';
+    data.forEach(function(row) {
+        csv += row.join(',') + '\n';
+    });
+    var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = filename + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    console.log('✅ CSV exportado correctamente');
+}
+
+// ==================== FUNCIÓN PRINCIPAL ====================
+function generateSalesReportAllLines() {
+    var date = document.getElementById('contadoDate').value;
     if (!date) { showError('contado', 'Seleccione fecha'); return; }
-    const btn = document.getElementById('btnAllLines');
-    const originalText = btn.innerHTML;
+    var btn = document.getElementById('btnAllLines');
+    var originalText = btn.innerHTML;
     btn.innerHTML = 'Consultando... <span class="loading-spinner"></span>';
     btn.disabled = true;
-    try {
-        const range = getDateRangeContado(date);
-        if (!range) throw new Error('Error en fecha');
-        
-        const [res4, res5] = await Promise.all([
-            fetch(`${CONFIG.API_SALES}?page=1&per_page=100&sale_type=products&classification_ids[]=9&classification_ids[]=3&line_id=4&start_date=${range.start}&end_date=${range.end}`, { headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` } }),
-            fetch(`${CONFIG.API_SALES}?page=1&per_page=100&sale_type=products&classification_ids[]=9&classification_ids[]=3&line_id=5&start_date=${range.start}&end_date=${range.end}`, { headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` } })
-        ]);
-        const data4 = await res4.json(), data5 = await res5.json();
-        const sales = [...(data4.data||[]), ...(data5.data||[])];
-        const map = new Map();
-        for (let sale of sales) {
-            for (let detail of (sale.details||[])) {
-                for (let group of (detail.specification_groups||[])) {
-                    for (let spec of (group.specification_details||[])) {
-                        if (spec.specification?.name === 'IMEI' && isValidImei(spec.value) && !map.has(spec.value)) {
-                            const isLibre = (detail.product?.name||'').toLowerCase().includes('libre');
-                            map.set(spec.value, {
-                                imei: spec.value,
-                                product: detail.product?.name || 'Desconocido',
-                                price: parseFloat(detail.total_amount || detail.total || 0),
-                                saleId: sale.id,
-                                seller: sale.user?.name || 'No disponible',
-                                sellerId: sale.user?.id || null,
-                                line: isLibre ? 'Libre' : 'Telcel',
-                                productId: detail.product?.id || null
-                            });
+    
+    (async function() {
+        try {
+            var range = getDateRangeContado(date);
+            if (!range) throw new Error('Error en fecha');
+            
+            var [res4, res5] = await Promise.all([
+                fetch(CONFIG.API_SALES + '?page=1&per_page=100&sale_type=products&classification_ids[]=9&classification_ids[]=3&line_id=4&start_date=' + range.start + '&end_date=' + range.end, { headers: { 'Authorization': 'Bearer ' + CONFIG.FIXED_TOKEN } }),
+                fetch(CONFIG.API_SALES + '?page=1&per_page=100&sale_type=products&classification_ids[]=9&classification_ids[]=3&line_id=5&start_date=' + range.start + '&end_date=' + range.end, { headers: { 'Authorization': 'Bearer ' + CONFIG.FIXED_TOKEN } })
+            ]);
+            var data4 = await res4.json(), data5 = await res5.json();
+            var sales = [].concat(data4.data || [], data5.data || []);
+            var map = new Map();
+            
+            for (var saleIdx = 0; saleIdx < sales.length; saleIdx++) {
+                var sale = sales[saleIdx];
+                var branchName = 'No disponible';
+                if (sale.warehouse && sale.warehouse.branch && sale.warehouse.branch.name) {
+                    branchName = sale.warehouse.branch.name;
+                } else if (sale.branch_name) {
+                    branchName = sale.branch_name;
+                }
+                
+                var ruta = getRutaByBranch(branchName);
+                
+                var details = sale.details || [];
+                for (var dIdx = 0; dIdx < details.length; dIdx++) {
+                    var detail = details[dIdx];
+                    var groups = detail.specification_groups || [];
+                    for (var gIdx = 0; gIdx < groups.length; gIdx++) {
+                        var group = groups[gIdx];
+                        var specs = group.specification_details || [];
+                        for (var sIdx = 0; sIdx < specs.length; sIdx++) {
+                            var spec = specs[sIdx];
+                            if (spec.specification && spec.specification.name === 'IMEI' && isValidImei(spec.value) && !map.has(spec.value)) {
+                                var isLibre = (detail.product && detail.product.name || '').toLowerCase().includes('libre');
+                                map.set(spec.value, {
+                                    imei: spec.value,
+                                    product: detail.product && detail.product.name || 'Desconocido',
+                                    price: parseFloat(detail.total_amount || detail.total || 0),
+                                    saleId: sale.id,
+                                    seller: sale.user && sale.user.name || 'No disponible',
+                                    sellerId: sale.user && sale.user.id || null,
+                                    line: isLibre ? 'Libre' : 'Telcel',
+                                    productId: detail.product && detail.product.id || null,
+                                    branch: branchName,
+                                    ruta: ruta
+                                });
+                            }
                         }
                     }
                 }
             }
-        }
-        const results = Array.from(map.values());
-        cachedSalesData = { date: date, results: results };
-        
-        const statsHtml = `
-            <button class="stat-card-btn" data-filter="all"><div class="stat-number">${results.length}</div><div class="stat-label">📱 Total IMEIs</div></button>
-            <button class="stat-card-btn" data-filter="telcel"><div class="stat-number">${results.filter(r=>r.line==='Telcel').length}</div><div class="stat-label">📶 Telcel</div></button>
-            <button class="stat-card-btn" data-filter="libre"><div class="stat-number">${results.filter(r=>r.line==='Libre').length}</div><div class="stat-label">🔓 Libre</div></button>
-            <button class="stat-card-btn" id="btnAnalyzeAllMarkup" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">
-                <div class="stat-number">📊</div>
-                <div class="stat-label">Analizar Markup</div>
-                <div style="font-size:0.65rem; margin-top:4px;">General del día</div>
-            </button>
-            <button class="stat-card-btn" id="btnAsesorSummary"><div class="stat-number">👥</div><div class="stat-label">Resumen Asesores</div></button>
-        `;
-        document.getElementById('contadoStats').innerHTML = statsHtml;
-        document.getElementById('contadoStats').style.display = 'grid';
-        
-        // Resetear análisis de markup para la nueva consulta
-        resetMarkupAnalysis();
-        
-        // Separar equipos por precio: >= 1500 y < 1500
-        const highPriceResults = results.filter(item => item.price >= 1500);
-        const lowPriceResults = results.filter(item => item.price < 1500);
-        
-        // Ordenar cada grupo por vendedor (alfabéticamente)
-        const sortBySeller = (a, b) => a.seller.localeCompare(b.seller);
-        highPriceResults.sort(sortBySeller);
-        lowPriceResults.sort(sortBySeller);
-        
-        let html = `<div class="table-container">`;
-        
-        // Sección de equipos de $1500 o más
-        if (highPriceResults.length > 0) {
-            html += `
-                <div class="section-header" style="background-color: #2c7da0; color: white; padding: 8px 12px; margin-top: 10px; border-radius: 8px;">
-                    <strong>💰 EQUIPOS DE $1,500 O MÁS (${highPriceResults.length} equipos)</strong>
-                </div>
-                <table class="imei-table">
-                    <thead>
-                        <tr><th>#</th><th>Venta</th><th>Línea</th><th>IMEI</th><th>Producto</th><th>Vendedor</th><th>Precio</th><th>Acción</th></tr>
-                    </thead>
-                    <tbody>`;
-            highPriceResults.forEach((item, i) => {
-                html += `<tr>
-                    <td>${i+1}</td>
-                    <td><button class="badge-sale-id" onclick="openReceipt(${item.saleId})">📄 #${item.saleId}</button></td>
-                    <td><span class="badge-${item.line==='Telcel'?'telcel':'libre'}">📱 ${item.line}</span></td>
-                    <td><code>${item.imei}</code></td>
-                    <td>${escapeHtml(item.product)}</div>
-                    <td>${escapeHtml(item.seller)}</div>
-                    <td>$${item.price.toFixed(2)} MXN</div>
-                    <td><button class="btn-analyze" data-imei="${item.imei}" data-price="${item.price}" data-date="${date}">🔍 Analizar</button></div>
-                </tr>`;
+            var results = Array.from(map.values());
+            
+            // Guardar datos
+            window.cachedSalesData = { date: date, results: results };
+            window._cachedContadoFullData = {
+                date: date,
+                results: results,
+                allSales: sales
+            };
+            
+            try {
+                var dataToStore = {
+                    date: date,
+                    results: results,
+                    allSales: sales || []
+                };
+                sessionStorage.setItem('contadoData', JSON.stringify(dataToStore));
+                localStorage.setItem('contadoData', JSON.stringify(dataToStore));
+                console.log('✅ Datos guardados en sessionStorage y localStorage');
+            } catch(e) {
+                console.warn('No se pudo guardar en storage:', e);
+            }
+            
+            console.log('✅ DATOS GUARDADOS:');
+            console.log('  window.cachedSalesData:', window.cachedSalesData ? window.cachedSalesData.results.length : 'null');
+            console.log('  window._cachedContadoFullData:', window._cachedContadoFullData ? window._cachedContadoFullData.results.length : 'null');
+            
+            var statsHtml = '\
+                <button class="stat-card-btn" data-filter="all"><div class="stat-number">' + results.length + '</div><div class="stat-label">📱 Total IMEIs</div></button>\
+                <button class="stat-card-btn" data-filter="telcel"><div class="stat-number">' + results.filter(function(r){return r.line==='Telcel';}).length + '</div><div class="stat-label">📶 Telcel</div></button>\
+                <button class="stat-card-btn" data-filter="libre"><div class="stat-number">' + results.filter(function(r){return r.line==='Libre';}).length + '</div><div class="stat-label">🔓 Libre</div></button>\
+                <button class="stat-card-btn" id="btnAnalyzeAllMarkup" style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);">\
+                    <div class="stat-number">📊</div>\
+                    <div class="stat-label">Analizar Markup</div>\
+                    <div style="font-size:0.65rem; margin-top:4px;">General del día</div>\
+                </button>\
+                <button class="stat-card-btn" id="btnAsesorSummary"><div class="stat-number">👥</div><div class="stat-label">Resumen Asesores</div></button>\
+            ';
+            document.getElementById('contadoStats').innerHTML = statsHtml;
+            document.getElementById('contadoStats').style.display = 'grid';
+            
+            resetMarkupAnalysis();
+            
+            // ========== ORDENAR POR RUTA, SUCURSAL, VENDEDOR ==========
+            results.sort(function(a, b) {
+                var rutaCompare = (a.ruta || 'Sin Ruta').localeCompare(b.ruta || 'Sin Ruta');
+                if (rutaCompare !== 0) return rutaCompare;
+                var branchCompare = (a.branch || 'No disponible').localeCompare(b.branch || 'No disponible');
+                if (branchCompare !== 0) return branchCompare;
+                return (a.seller || '').localeCompare(b.seller || '');
             });
-            html += `</tbody></table>`;
-        }
-        
-        // Sección de equipos de menos de $1500
-        if (lowPriceResults.length > 0) {
-            html += `
-                <div class="section-header" style="background-color: #52b788; color: white; padding: 8px 12px; margin-top: 20px; border-radius: 8px;">
-                    <strong>🛒 EQUIPOS DE MENOS DE $1,500 (${lowPriceResults.length} equipos)</strong>
-                </div>
-                <table class="imei-table">
-                    <thead>
-                        <tr><th>#</th><th>Venta</th><th>Línea</th><th>IMEI</th><th>Producto</th><th>Vendedor</th><th>Precio</th><th>Acción</th></tr>
-                    </thead>
-                    <tbody>`;
-            lowPriceResults.forEach((item, i) => {
-                html += `<tr>
-                    <td>${i+1}</td>
-                    <td><button class="badge-sale-id" onclick="openReceipt(${item.saleId})">📄 #${item.saleId}</button></td>
-                    <td><span class="badge-${item.line==='Telcel'?'telcel':'libre'}">📱 ${item.line}</span></td>
-                    <td><code>${item.imei}</code></td>
-                    <td>${escapeHtml(item.product)}</div>
-                    <td>${escapeHtml(item.seller)}</div>
-                    <td>$${item.price.toFixed(2)} MXN</div>
-                    <td><button class="btn-analyze" data-imei="${item.imei}" data-price="${item.price}" data-date="${date}">🔍 Analizar</button></div>
-                </tr>`;
+            
+            var highPriceResults = results.filter(function(item) { return item.price >= 1500; });
+            var lowPriceResults = results.filter(function(item) { return item.price < 1500; });
+            
+            var html = '<div class="table-container">';
+            
+            if (results.length > 0) {
+                html += '\
+                    <div style="display: flex; justify-content: flex-end; margin-bottom: 16px; gap: 10px;">\
+                        <button id="exportAllContadoBtn" style="\
+                            background: linear-gradient(135deg, #059669 0%, #10b981 100%);\
+                            color: white;\
+                            border: none;\
+                            padding: 8px 20px;\
+                            border-radius: 8px;\
+                            font-size: 0.85rem;\
+                            font-weight: 600;\
+                            cursor: pointer;\
+                            transition: all 0.2s;\
+                            display: flex;\
+                            align-items: center;\
+                            gap: 8px;\
+                        ">\
+                            📊 Exportar Todas las Ventas\
+                        </button>\
+                    </div>\
+                ';
+            }
+            
+            // ========== TABLA REORDENADA: VENTA | LÍNEA | IMEI | PRODUCTO | RUTA | SUCURSAL | VENDEDOR | PRECIO | ACCIÓN ==========
+            if (highPriceResults.length > 0) {
+                html += '\
+                    <div class="section-header" style="background-color: #2c7da0; color: white; padding: 8px 12px; margin-top: 10px; border-radius: 8px;">\
+                        <strong>💰 EQUIPOS DE $1,500 O MÁS (' + highPriceResults.length + ' equipos)</strong>\
+                    </div>\
+                    <table class="imei-table">\
+                        <thead>\
+                            <tr>\
+                                <th>#</th>\
+                                <th>Venta</th>\
+                                <th>Línea</th>\
+                                <th>IMEI</th>\
+                                <th>Producto</th>\
+                                <th>Ruta</th>\
+                                <th>Sucursal</th>\
+                                <th>Vendedor</th>\
+                                <th>Precio</th>\
+                                <th>Acción</th>\
+                            </tr>\
+                        </thead>\
+                        <tbody>';
+                for (var i = 0; i < highPriceResults.length; i++) {
+                    var item = highPriceResults[i];
+                    html += '<tr>\
+                        <td>' + (i+1) + '</td>\
+                        <td><button class="badge-sale-id" onclick="openReceipt(' + item.saleId + ')">📄 #' + item.saleId + '</button></td>\
+                        <td><span class="badge-' + (item.line==='Telcel'?'telcel':'libre') + '">📱 ' + item.line + '</span></td>\
+                        <td><code>' + item.imei + '</code></td>\
+                        <td>' + escapeHtml(item.product) + '</td>\
+                        <td><span style="background: ' + (item.ruta === 'Sin Ruta' ? '#94a3b8' : '#f97316') + '; color: white; padding: 2px 10px; border-radius: 12px; font-size: 0.65rem;">' + item.ruta + '</span></td>\
+                        <td>' + escapeHtml(item.branch) + '</td>\
+                        <td>' + escapeHtml(item.seller) + '</td>\
+                        <td>$' + item.price.toFixed(2) + ' MXN</td>\
+                        <td><button class="btn-analyze" data-imei="' + item.imei + '" data-price="' + item.price + '" data-date="' + date + '">🔍 Analizar</button></td>\
+                    </tr>';
+                }
+                html += '</tbody></table>';
+            }
+            
+            if (lowPriceResults.length > 0) {
+                html += '\
+                    <div class="section-header" style="background-color: #52b788; color: white; padding: 8px 12px; margin-top: 20px; border-radius: 8px;">\
+                        <strong>🛒 EQUIPOS DE MENOS DE $1,500 (' + lowPriceResults.length + ' equipos)</strong>\
+                    </div>\
+                    <table class="imei-table">\
+                        <thead>\
+                            <tr>\
+                                <th>#</th>\
+                                <th>Venta</th>\
+                                <th>Línea</th>\
+                                <th>IMEI</th>\
+                                <th>Producto</th>\
+                                <th>Ruta</th>\
+                                <th>Sucursal</th>\
+                                <th>Vendedor</th>\
+                                <th>Precio</th>\
+                                <th>Acción</th>\
+                            </tr>\
+                        </thead>\
+                        <tbody>';
+                for (var j = 0; j < lowPriceResults.length; j++) {
+                    var item2 = lowPriceResults[j];
+                    html += '<tr>\
+                        <td>' + (j+1) + '</td>\
+                        <td><button class="badge-sale-id" onclick="openReceipt(' + item2.saleId + ')">📄 #' + item2.saleId + '</button></td>\
+                        <td><span class="badge-' + (item2.line==='Telcel'?'telcel':'libre') + '">📱 ' + item2.line + '</span></td>\
+                        <td><code>' + item2.imei + '</code></td>\
+                        <td>' + escapeHtml(item2.product) + '</td>\
+                        <td><span style="background: ' + (item2.ruta === 'Sin Ruta' ? '#94a3b8' : '#f97316') + '; color: white; padding: 2px 10px; border-radius: 12px; font-size: 0.65rem;">' + item2.ruta + '</span></td>\
+                        <td>' + escapeHtml(item2.branch) + '</td>\
+                        <td>' + escapeHtml(item2.seller) + '</td>\
+                        <td>$' + item2.price.toFixed(2) + ' MXN</td>\
+                        <td><button class="btn-analyze" data-imei="' + item2.imei + '" data-price="' + item2.price + '" data-date="' + date + '">🔍 Analizar</button></td>\
+                    </tr>';
+                }
+                html += '</tbody></table>';
+            }
+            
+            html += '</div>';
+            document.getElementById('contadoResults').innerHTML = html;
+            document.getElementById('contadoResults').style.display = 'block';
+            
+            document.querySelectorAll('#contadoResults .btn-analyze').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    openAnalysisModal(btn.dataset.imei, parseFloat(btn.dataset.price), btn.dataset.date, 'Contado');
+                });
             });
-            html += `</tbody> </div>`;
-        }
-        
-        html += `</div>`;
-        document.getElementById('contadoResults').innerHTML = html;
-        document.getElementById('contadoResults').style.display = 'block';
-        
-        // Asignar eventos de análisis
-        document.querySelectorAll('#contadoResults .btn-analyze').forEach(btn => {
-            btn.addEventListener('click', async (e) => { await openAnalysisModal(btn.dataset.imei, parseFloat(btn.dataset.price), btn.dataset.date, 'Contado'); });
-        });
-        
-        // Asignar eventos de estadísticas
-        document.querySelectorAll('#contadoStats .stat-card-btn[data-filter]').forEach(btn => {
-            btn.addEventListener('click', () => openResumenModal(btn.getAttribute('data-filter')));
-        });
-        
-        // Evento para el botón de resumen de asesores
-        const btnAsesorSummary = document.getElementById('btnAsesorSummary');
-        if (btnAsesorSummary) {
-            btnAsesorSummary.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openAsesorSummaryModal();
+            
+            document.querySelectorAll('#contadoStats .stat-card-btn[data-filter]').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    openResumenModal(btn.getAttribute('data-filter'));
+                });
             });
+            
+            var btnAsesorSummary = document.getElementById('btnAsesorSummary');
+            if (btnAsesorSummary) {
+                btnAsesorSummary.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    openAsesorSummaryModal();
+                });
+            }
+            
+            var btnAnalyzeAllMarkup = document.getElementById('btnAnalyzeAllMarkup');
+            if (btnAnalyzeAllMarkup) {
+                btnAnalyzeAllMarkup.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    analyzeAllMarkup();
+                });
+            }
+            
+            var exportBtn = document.getElementById('exportAllContadoBtn');
+            if (exportBtn) {
+                var newExportBtn = exportBtn.cloneNode(true);
+                exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
+                newExportBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🖱️ Click en exportar todas las ventas');
+                    exportAllContadoToExcel();
+                };
+                console.log('✅ Botón exportAllContadoBtn configurado con onclick');
+            }
+            
+        } catch(e) {
+            console.error('Error en generateSalesReportAllLines:', e);
+            showError('contado', e.message);
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
         }
-        
-        // Evento para el botón de análisis de markup general
-        const btnAnalyzeAllMarkup = document.getElementById('btnAnalyzeAllMarkup');
-        if (btnAnalyzeAllMarkup) {
-            btnAnalyzeAllMarkup.addEventListener('click', (e) => {
-                e.stopPropagation();
-                analyzeAllMarkup();
-            });
-        }
-        
-    } catch(e) { showError('contado', e.message); }
-    finally { btn.innerHTML = originalText; btn.disabled = false; }
+    })();
 }
 
-function openResumenModal(filter) {
-    if (!cachedSalesData || !cachedSalesData.results) { showError('contado', 'Primero consulta las ventas'); return; }
-    let filteredResults = cachedSalesData.results;
-    let title = '📱 Resumen de Equipos (Todos)';
-    if (filter === 'telcel') { filteredResults = cachedSalesData.results.filter(r => r.line === 'Telcel'); title = '📶 Resumen de Equipos TELCEL'; }
-    else if (filter === 'libre') { filteredResults = cachedSalesData.results.filter(r => r.line === 'Libre'); title = '🔓 Resumen de Equipos LIBRE'; }
+// ==================== EXPORTAR TODAS LAS VENTAS A EXCEL ====================
+
+function exportAllContadoToExcel() {
+    console.log('📊 [EXPORT] Iniciando exportación...');
     
-    const productMap = new Map();
-    for (let item of filteredResults) {
-        const productName = item.product;
+    var data = obtenerDatosContado();
+    
+    if (!data || !data.results || data.results.length === 0) {
+        console.error('❌ No hay datos para exportar');
+        alert('⚠️ Primero debes consultar las ventas usando el botón "Consultar"');
+        showError('contado', 'Primero consulta las ventas');
+        return;
+    }
+    
+    var date = data.date;
+    var results = data.results;
+    
+    console.log('📊 Exportando ' + results.length + ' registros...');
+    
+    // ========== EXPORTAR CON EL MISMO ORDEN: VENTA | LÍNEA | IMEI | PRODUCTO | RUTA | SUCURSAL | VENDEDOR | PRECIO ==========
+    var sortedResults = [].concat(results).sort(function(a, b) {
+        var rutaCompare = (a.ruta || 'Sin Ruta').localeCompare(b.ruta || 'Sin Ruta');
+        if (rutaCompare !== 0) return rutaCompare;
+        var branchCompare = (a.branch || 'No disponible').localeCompare(b.branch || 'No disponible');
+        if (branchCompare !== 0) return branchCompare;
+        return (a.seller || '').localeCompare(b.seller || '');
+    });
+    
+    var excelData = [
+        ['REPORTE DE VENTAS DE CONTADO'],
+        ['Fecha: ' + formatDate(date)],
+        ['Total de equipos: ' + results.length],
+        [],
+        ['#', 'Venta ID', 'Línea', 'IMEI', 'Producto', 'Ruta', 'Sucursal', 'Vendedor', 'Precio']
+    ];
+    
+    sortedResults.forEach(function(item, index) {
+        excelData.push([
+            index + 1,
+            item.saleId || 'N/A',
+            item.line || 'N/A',
+            item.imei || 'N/A',
+            item.product || 'N/A',
+            item.ruta || 'Sin Ruta',
+            item.branch || 'No disponible',
+            item.seller || 'N/A',
+            (item.price || 0).toFixed(2)
+        ]);
+    });
+    
+    var totalContado = results.reduce(function(sum, r) { return sum + (r.price || 0); }, 0);
+    var totalTelcel = results.filter(function(r) { return r.line === 'Telcel'; }).length;
+    var totalLibre = results.filter(function(r) { return r.line === 'Libre'; }).length;
+    
+    excelData.push([]);
+    excelData.push(['RESUMEN']);
+    excelData.push(['Total Equipos', results.length]);
+    excelData.push(['Total Telcel', totalTelcel]);
+    excelData.push(['Total Libre', totalLibre]);
+    excelData.push(['Monto Total', totalContado.toFixed(2)]);
+    
+    var rutasUnicas = [];
+    var rutaSet = new Set();
+    results.forEach(function(r) { rutaSet.add(r.ruta || 'Sin Ruta'); });
+    rutasUnicas = Array.from(rutaSet).sort();
+    
+    if (rutasUnicas.length > 0) {
+        excelData.push([]);
+        excelData.push(['RESUMEN POR RUTA']);
+        excelData.push(['Ruta', 'Cantidad', 'Monto Total']);
+        rutasUnicas.forEach(function(ruta) {
+            var itemsRuta = results.filter(function(r) { return (r.ruta || 'Sin Ruta') === ruta; });
+            var totalRuta = itemsRuta.reduce(function(sum, r) { return sum + (r.price || 0); }, 0);
+            excelData.push([ruta, itemsRuta.length, totalRuta.toFixed(2)]);
+        });
+    }
+    
+    try {
+        if (typeof XLSX !== 'undefined') {
+            console.log('📊 Creando archivo Excel con XLSX...');
+            var wb = XLSX.utils.book_new();
+            var ws = XLSX.utils.aoa_to_sheet(excelData);
+            ws['!cols'] = [
+                { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 18 },
+                { wch: 35 }, { wch: 12 }, { wch: 25 }, { wch: 25 }, { wch: 15 }
+            ];
+            XLSX.utils.book_append_sheet(wb, ws, 'Ventas Contado');
+            XLSX.writeFile(wb, 'ventas_contado_' + date + '.xlsx');
+            console.log('✅ Archivo Excel generado correctamente.');
+            showInfo('contado', '✅ Exportadas ' + results.length + ' ventas a Excel');
+        } else {
+            console.warn('⚠️ XLSX no disponible, usando CSV');
+            exportToCSV(excelData, 'ventas_contado_' + date);
+            showInfo('contado', '✅ Exportadas ' + results.length + ' ventas a CSV');
+        }
+    } catch(e) {
+        console.error('❌ Error exportando:', e);
+        exportToCSV(excelData, 'ventas_contado_' + date);
+        showInfo('contado', '✅ Exportadas ' + results.length + ' ventas a CSV (fallback)');
+    }
+}
+
+// ==================== RESUMEN POR MODELO ====================
+
+function openResumenModal(filter) {
+    var data = obtenerDatosContado();
+    if (!data || !data.results) { 
+        showError('contado', 'Primero consulta las ventas'); 
+        return; 
+    }
+    
+    var results = data.results;
+    var title = '📱 Resumen de Equipos (Todos)';
+    if (filter === 'telcel') { 
+        results = data.results.filter(function(r) { return r.line === 'Telcel'; }); 
+        title = '📶 Resumen de Equipos TELCEL'; 
+    } else if (filter === 'libre') { 
+        results = data.results.filter(function(r) { return r.line === 'Libre'; }); 
+        title = '🔓 Resumen de Equipos LIBRE'; 
+    }
+    
+    var productMap = new Map();
+    for (var i = 0; i < results.length; i++) {
+        var item = results[i];
+        var productName = item.product;
         if (productMap.has(productName)) {
-            const existing = productMap.get(productName);
+            var existing = productMap.get(productName);
             existing.cantidad++;
             existing.total += item.price;
         } else {
             productMap.set(productName, { nombre: productName, cantidad: 1, precioUnitario: item.price, total: item.price });
         }
     }
-    const productos = Array.from(productMap.values()).sort((a,b) => a.nombre.localeCompare(b.nombre));
-    const totalUnidades = productos.reduce((sum, p) => sum + p.cantidad, 0);
-    const totalVenta = productos.reduce((sum, p) => sum + p.total, 0);
+    var productos = Array.from(productMap.values()).sort(function(a,b) { return a.nombre.localeCompare(b.nombre); });
+    var totalUnidades = productos.reduce(function(sum, p) { return sum + p.cantidad; }, 0);
+    var totalVenta = productos.reduce(function(sum, p) { return sum + p.total; }, 0);
     
-    let modal = document.getElementById('resumenModal');
+    var modal = document.getElementById('resumenModal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'resumenModal';
         modal.className = 'modal';
-        modal.innerHTML = `<div class="modal-content"><div class="modal-header"><h3 id="resumenModalTitle">📊 Resumen de equipos</h3><span class="close-modal">&times;</span></div><div class="modal-body" id="resumenModalBody"></div><div class="modal-footer">Ventas de contado</div></div>`;
+        modal.innerHTML = '<div class="modal-content"><div class="modal-header"><h3 id="resumenModalTitle">📊 Resumen de equipos</h3><span class="close-modal">&times;</span></div><div class="modal-body" id="resumenModalBody"></div><div class="modal-footer">Ventas de contado</div></div>';
         document.body.appendChild(modal);
-        modal.querySelector('.close-modal').onclick = () => modal.style.display = 'none';
-        window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+        modal.querySelector('.close-modal').onclick = function() { modal.style.display = 'none'; };
+        window.onclick = function(e) { if (e.target === modal) modal.style.display = 'none'; };
     }
     document.getElementById('resumenModalTitle').innerHTML = title;
-    let tableHtml = `<div class="stats" style="margin-bottom:20px">
-        <div class="stat-card"><div class="stat-number">${totalUnidades}</div><div class="stat-label">Total Equipos</div></div>
-        <div class="stat-card"><div class="stat-number">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(totalVenta)}</div><div class="stat-label">Total Venta</div></div>
-    </div>
-    <div class="table-container">
-        <table class="resumen-table">
-            <thead>
-                <tr><th>#</th><th>Producto</th><th>Cantidad</th><th>Precio Unitario</th><th>Total</th></tr>
-            </thead>
-            <tbody>`;
-    productos.forEach((prod, idx) => { tableHtml += `<tr>
-                <td>${idx+1}</td>
-                <td style="text-align:left">${escapeHtml(prod.nombre)}</div>
-                <td style="text-align:center"><strong>${prod.cantidad}</strong></div>
-                <td style="text-align:right">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(prod.precioUnitario)}</div>
-                <td style="text-align:right">${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(prod.total)}</div>
-            </tr>`;
+    var tableHtml = '<div class="stats" style="margin-bottom:20px">\
+        <div class="stat-card"><div class="stat-number">' + totalUnidades + '</div><div class="stat-label">Total Equipos</div></div>\
+        <div class="stat-card"><div class="stat-number">' + new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(totalVenta) + '</div><div class="stat-label">Total Venta</div></div>\
+    </div>\
+    <div class="table-container">\
+        <table class="resumen-table">\
+            <thead>\
+                <tr><th>#</th><th>Producto</th><th>Cantidad</th><th>Precio Unitario</th><th>Total</th></tr>\
+            </thead>\
+            <tbody>';
+    productos.forEach(function(prod, idx) { 
+        tableHtml += '<tr>\
+            <td>' + (idx+1) + '</td>\
+            <td style="text-align:left">' + escapeHtml(prod.nombre) + '</td>\
+            <td style="text-align:center"><strong>' + prod.cantidad + '</strong></td>\
+            <td style="text-align:right">' + new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(prod.precioUnitario) + '</td>\
+            <td style="text-align:right">' + new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(prod.total) + '</td>\
+        </tr>';
     });
-    tableHtml += `</tbody> </div>`;
+    tableHtml += '</tbody></table></div>';
     document.getElementById('resumenModalBody').innerHTML = tableHtml;
     modal.style.display = 'block';
 }
 
-async function openAnalysisModal(imei, salePrice, saleDate, saleType) {
-    let modal = document.getElementById('analysisModal');
+// ==================== ANÁLISIS DE EQUIPO ====================
+
+function openAnalysisModal(imei, salePrice, saleDate, saleType) {
+    var modal = document.getElementById('analysisModal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'analysisModal';
         modal.className = 'modal';
-        modal.innerHTML = `<div class="modal-content"><div class="modal-header"><h3>📊 Análisis de equipo</h3><span class="close-modal">&times;</span></div><div class="modal-body" id="modalBody"><div class="loader-modal"><div class="spinner-modal"></div><p>Cargando información del equipo...</p></div></div></div>`;
+        modal.innerHTML = '<div class="modal-content"><div class="modal-header"><h3>📊 Análisis de equipo</h3><span class="close-modal">&times;</span></div><div class="modal-body" id="modalBody"><div class="loader-modal"><div class="spinner-modal"></div><p>Cargando información del equipo...</p></div></div></div>';
         document.body.appendChild(modal);
-        modal.querySelector('.close-modal').onclick = () => modal.style.display = 'none';
-        window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+        modal.querySelector('.close-modal').onclick = function() { modal.style.display = 'none'; };
+        window.onclick = function(e) { if (e.target === modal) modal.style.display = 'none'; };
     }
     modal.style.display = 'block';
-    try {
-        const inv = await fetchInventoryCost(imei);
-        const cost = parseFloat(inv.cost) || 0;
-        const costConIva = cost * 1.16;
-        const markup = salePrice - costConIva;
-        const margin = salePrice > 0 ? (markup / salePrice) * 100 : 0;
-        
-        document.getElementById('modalBody').innerHTML = `
-            <div class="analysis-card-info">
-                <h4>📱 ${escapeHtml(inv.stock?.product?.name || 'Producto')}</h4>
-                <div class="analysis-row"><span class="analysis-label">IMEI:</span><span class="analysis-value"><code>${imei}</code></span></div>
-                <div class="analysis-row"><span class="analysis-label">Costo + IVA:</span><span class="analysis-value">$${costConIva.toFixed(2)} MXN</span></div>
-                <div class="analysis-row"><span class="analysis-label">Precio Venta:</span><span class="analysis-value">$${salePrice.toFixed(2)} MXN</span></div>
-            </div>
-            <div class="grid-2cols">
-                <div class="markup-card"><div class="value">$${markup.toFixed(2)} MXN</div><div>💰 Utilidad</div></div>
-                <div class="margin-card"><div class="value">${margin.toFixed(1)}%</div><div>📊 Margen</div></div>
-            </div>`;
-    } catch(e) { document.getElementById('modalBody').innerHTML = `<div class="alert alert-error">❌ Error: ${e.message}</div>`; }
+    
+    (async function() {
+        try {
+            var inv = await fetchInventoryCost(imei);
+            var cost = parseFloat(inv.cost) || 0;
+            var costConIva = cost * 1.16;
+            var markup = salePrice - costConIva;
+            var margin = salePrice > 0 ? (markup / salePrice) * 100 : 0;
+            
+            document.getElementById('modalBody').innerHTML = '\
+                <div class="analysis-card-info">\
+                    <h4>📱 ' + escapeHtml(inv.stock && inv.stock.product && inv.stock.product.name || 'Producto') + '</h4>\
+                    <div class="analysis-row"><span class="analysis-label">IMEI:</span><span class="analysis-value"><code>' + imei + '</code></span></div>\
+                    <div class="analysis-row"><span class="analysis-label">Costo + IVA:</span><span class="analysis-value">$' + costConIva.toFixed(2) + ' MXN</span></div>\
+                    <div class="analysis-row"><span class="analysis-label">Precio Venta:</span><span class="analysis-value">$' + salePrice.toFixed(2) + ' MXN</span></div>\
+                </div>\
+                <div class="grid-2cols">\
+                    <div class="markup-card"><div class="value">$' + markup.toFixed(2) + ' MXN</div><div>💰 Utilidad</div></div>\
+                    <div class="margin-card"><div class="value">' + margin.toFixed(1) + '%</div><div>📊 Margen</div></div>\
+                </div>';
+        } catch(e) { 
+            document.getElementById('modalBody').innerHTML = '<div class="alert alert-error">❌ Error: ' + e.message + '</div>'; 
+        }
+    })();
 }
 
+// ==================== RESUMEN DE ASESORES ====================
+
 function openAsesorSummaryModal() {
-    if (!cachedSalesData || !cachedSalesData.results) { 
+    var data = obtenerDatosContado();
+    if (!data || !data.results) { 
         showError('contado', 'Primero consulta las ventas'); 
         return; 
     }
     
-    const results = cachedSalesData.results;
+    var results = data.results;
+    var ventasPorAsesor = new Map();
     
-    // Crear mapa de ventas por asesor (usando sellerId)
-    const ventasPorAsesor = new Map();
-    
-    for (let item of results) {
-        const id = item.sellerId;
-        const nombre = item.seller;
-        const isHighPrice = item.price >= 1500;
-        
-        const key = id || nombre;
+    for (var i = 0; i < results.length; i++) {
+        var item = results[i];
+        var id = item.sellerId;
+        var nombre = item.seller;
+        var isHighPrice = item.price >= 1500;
+        var key = id || nombre;
         
         if (!ventasPorAsesor.has(key)) {
             ventasPorAsesor.set(key, {
@@ -273,318 +594,347 @@ function openAsesorSummaryModal() {
                 total: 0
             });
         }
-        
-        const data = ventasPorAsesor.get(key);
+        var asesorData = ventasPorAsesor.get(key);
         if (isHighPrice) {
-            data.alta++;
+            asesorData.alta++;
         } else {
-            data.baja++;
+            asesorData.baja++;
         }
-        data.total++;
+        asesorData.total++;
     }
     
-    // Construir estructura por equipos
-    const equipos = [];
+    var equipos = [];
     
-    for (const [teamName, teamData] of Object.entries(TEAM_STRUCTURE)) {
-        let liderAlta = 0, liderBaja = 0, liderTotal = 0;
-        
-        if (teamData.liderId && ventasPorAsesor.has(teamData.liderId)) {
-            const lider = ventasPorAsesor.get(teamData.liderId);
-            liderAlta = lider.alta;
-            liderBaja = lider.baja;
-            liderTotal = lider.total;
-        } else {
-            for (const [key, value] of ventasPorAsesor) {
-                if (value.nombre === teamData.liderNombre) {
-                    liderAlta = value.alta;
-                    liderBaja = value.baja;
-                    liderTotal = value.total;
-                    break;
-                }
-            }
-        }
-        
-        const miembros = [];
-        let equipoAlta = liderAlta;
-        let equipoBaja = liderBaja;
-        let equipoTotal = liderTotal;
-        
-        for (const miembroId of teamData.miembros) {
-            let miembroAlta = 0, miembroBaja = 0, miembroTotal = 0;
-            let miembroInfo = null;
+    for (var teamName in TEAM_STRUCTURE) {
+        if (TEAM_STRUCTURE.hasOwnProperty(teamName)) {
+            var teamData = TEAM_STRUCTURE[teamName];
+            var liderAlta = 0, liderBaja = 0, liderTotal = 0;
             
-            if (ventasPorAsesor.has(miembroId)) {
-                miembroInfo = ventasPorAsesor.get(miembroId);
-                miembroAlta = miembroInfo.alta;
-                miembroBaja = miembroInfo.baja;
-                miembroTotal = miembroInfo.total;
+            if (teamData.liderId && ventasPorAsesor.has(teamData.liderId)) {
+                var lider = ventasPorAsesor.get(teamData.liderId);
+                liderAlta = lider.alta;
+                liderBaja = lider.baja;
+                liderTotal = lider.total;
             } else {
-                for (const [key, value] of ventasPorAsesor) {
-                    if (value.id === miembroId) {
-                        miembroAlta = value.alta;
-                        miembroBaja = value.baja;
-                        miembroTotal = value.total;
-                        miembroInfo = value;
+                for (var kv of ventasPorAsesor) {
+                    if (kv[1].nombre === teamData.liderNombre) {
+                        liderAlta = kv[1].alta;
+                        liderBaja = kv[1].baja;
+                        liderTotal = kv[1].total;
                         break;
                     }
                 }
             }
             
-            if (miembroTotal > 0 && miembroInfo) {
-                miembros.push({
-                    nombre: miembroInfo.nombre,
-                    alta: miembroAlta,
-                    baja: miembroBaja,
-                    total: miembroTotal
-                });
-                equipoAlta += miembroAlta;
-                equipoBaja += miembroBaja;
-                equipoTotal += miembroTotal;
+            var miembros = [];
+            var equipoAlta = liderAlta;
+            var equipoBaja = liderBaja;
+            var equipoTotal = liderTotal;
+            
+            for (var mIdx = 0; mIdx < teamData.miembros.length; mIdx++) {
+                var miembroId = teamData.miembros[mIdx];
+                var miembroAlta = 0, miembroBaja = 0, miembroTotal = 0;
+                var miembroInfo = null;
+                
+                if (ventasPorAsesor.has(miembroId)) {
+                    miembroInfo = ventasPorAsesor.get(miembroId);
+                    miembroAlta = miembroInfo.alta;
+                    miembroBaja = miembroInfo.baja;
+                    miembroTotal = miembroInfo.total;
+                } else {
+                    for (var kv2 of ventasPorAsesor) {
+                        if (kv2[1].id === miembroId) {
+                            miembroAlta = kv2[1].alta;
+                            miembroBaja = kv2[1].baja;
+                            miembroTotal = kv2[1].total;
+                            miembroInfo = kv2[1];
+                            break;
+                        }
+                    }
+                }
+                
+                if (miembroTotal > 0 && miembroInfo) {
+                    miembros.push({
+                        nombre: miembroInfo.nombre,
+                        alta: miembroAlta,
+                        baja: miembroBaja,
+                        total: miembroTotal
+                    });
+                    equipoAlta += miembroAlta;
+                    equipoBaja += miembroBaja;
+                    equipoTotal += miembroTotal;
+                }
             }
-        }
-        
-        miembros.sort((a, b) => b.total - a.total);
-        
-        if (equipoTotal > 0) {
-            equipos.push({
-                nombre: teamName,
-                liderNombre: teamData.liderNombre,
-                liderAlta: liderAlta,
-                liderBaja: liderBaja,
-                liderTotal: liderTotal,
-                miembros: miembros,
-                equipoAlta: equipoAlta,
-                equipoBaja: equipoBaja,
-                equipoTotal: equipoTotal
-            });
+            
+            miembros.sort(function(a, b) { return b.total - a.total; });
+            
+            if (equipoTotal > 0) {
+                equipos.push({
+                    nombre: teamName,
+                    liderNombre: teamData.liderNombre,
+                    liderAlta: liderAlta,
+                    liderBaja: liderBaja,
+                    liderTotal: liderTotal,
+                    miembros: miembros,
+                    equipoAlta: equipoAlta,
+                    equipoBaja: equipoBaja,
+                    equipoTotal: equipoTotal
+                });
+            }
         }
     }
     
-    equipos.sort((a, b) => b.equipoTotal - a.equipoTotal);
+    equipos.sort(function(a, b) { return b.equipoTotal - a.equipoTotal; });
     
-    const totalGeneralAlta = equipos.reduce((sum, e) => sum + e.equipoAlta, 0);
-    const totalGeneralBaja = equipos.reduce((sum, e) => sum + e.equipoBaja, 0);
-    const totalGeneral = equipos.reduce((sum, e) => sum + e.equipoTotal, 0);
+    var totalGeneralAlta = equipos.reduce(function(sum, e) { return sum + e.equipoAlta; }, 0);
+    var totalGeneralBaja = equipos.reduce(function(sum, e) { return sum + e.equipoBaja; }, 0);
+    var totalGeneral = equipos.reduce(function(sum, e) { return sum + e.equipoTotal; }, 0);
     
-    // Crear modal
-    let modal = document.getElementById('asesorSummaryModal');
+    var modal = document.getElementById('asesorSummaryModal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'asesorSummaryModal';
         modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 800px;">
-                <div class="modal-header">
-                    <h3>👥 Resumen por Equipo - Cantidades</h3>
-                    <span class="close-modal">&times;</span>
-                </div>
-                <div style="padding: 12px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
-                    <button id="exportExcelBtn" style="background: #10b981; padding: 6px 12px; font-size: 12px; border-radius: 6px;">📊 Exportar a Excel</button>
-                </div>
-                <div class="modal-body" id="asesorSummaryModalBody"></div>
-                <div class="modal-footer">
-                    Ventas de contado | Cantidades de equipos
-                </div>
-            </div>
-        `;
+        modal.innerHTML = '\
+            <div class="modal-content" style="max-width: 800px;">\
+                <div class="modal-header">\
+                    <h3>👥 Resumen por Equipo - Cantidades</h3>\
+                    <span class="close-modal">&times;</span>\
+                </div>\
+                <div style="padding: 12px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">\
+                    <button id="exportExcelBtn" style="background: #10b981; padding: 6px 12px; font-size: 12px; border-radius: 6px;">📊 Exportar a Excel</button>\
+                </div>\
+                <div class="modal-body" id="asesorSummaryModalBody"></div>\
+                <div class="modal-footer">\
+                    Ventas de contado | Cantidades de equipos\
+                </div>\
+            </div>\
+        ';
         document.body.appendChild(modal);
-        modal.querySelector('.close-modal').onclick = () => modal.style.display = 'none';
-        window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+        modal.querySelector('.close-modal').onclick = function() { modal.style.display = 'none'; };
+        window.onclick = function(e) { if (e.target === modal) modal.style.display = 'none'; };
     }
     
-    // Generar tabla HTML
-    let tableHtml = `
-        <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
-            <div style="flex: 1; background: #2c7da0; color: white; padding: 12px; border-radius: 12px; text-align: center;">
-                <div style="font-size: 24px; font-weight: bold;">${totalGeneralAlta}</div>
-                <div style="font-size: 11px;">💰 Equipos ≥ $1,500</div>
-            </div>
-            <div style="flex: 1; background: #52b788; color: white; padding: 12px; border-radius: 12px; text-align: center;">
-                <div style="font-size: 24px; font-weight: bold;">${totalGeneralBaja}</div>
-                <div style="font-size: 11px;">🛒 Equipos < $1,500</div>
-            </div>
-            <div style="flex: 1; background: #1e6091; color: white; padding: 12px; border-radius: 12px; text-align: center;">
-                <div style="font-size: 24px; font-weight: bold;">${totalGeneral}</div>
-                <div style="font-size: 11px;">📱 Total Equipos</div>
-            </div>
-        </div>
-        
-        <div style="max-height: 500px; overflow-y: auto;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                <thead style="position: sticky; top: 0; background: #f8fafc;">
-                    <tr style="border-bottom: 2px solid #2c7da0;">
-                        <th style="padding: 10px; text-align: center;">#</th>
-                        <th style="padding: 10px; text-align: left;">Equipo / Asesor</th>
-                        <th style="padding: 10px; text-align: center; background: #2c7da0; color: white;">💰 ≥ $1,500</th>
-                        <th style="padding: 10px; text-align: center; background: #52b788; color: white;">🛒 < $1,500</th>
-                        <th style="padding: 10px; text-align: center;">📱 Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
+    var tableHtml = '\
+        <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">\
+            <div style="flex: 1; background: #2c7da0; color: white; padding: 12px; border-radius: 12px; text-align: center;">\
+                <div style="font-size: 24px; font-weight: bold;">' + totalGeneralAlta + '</div>\
+                <div style="font-size: 11px;">💰 Equipos ≥ $1,500</div>\
+            </div>\
+            <div style="flex: 1; background: #52b788; color: white; padding: 12px; border-radius: 12px; text-align: center;">\
+                <div style="font-size: 24px; font-weight: bold;">' + totalGeneralBaja + '</div>\
+                <div style="font-size: 11px;">🛒 Equipos < $1,500</div>\
+            </div>\
+            <div style="flex: 1; background: #1e6091; color: white; padding: 12px; border-radius: 12px; text-align: center;">\
+                <div style="font-size: 24px; font-weight: bold;">' + totalGeneral + '</div>\
+                <div style="font-size: 11px;">📱 Total Equipos</div>\
+            </div>\
+        </div>\
+        <div style="max-height: 500px; overflow-y: auto;">\
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">\
+                <thead style="position: sticky; top: 0; background: #f8fafc;">\
+                    <tr style="border-bottom: 2px solid #2c7da0;">\
+                        <th style="padding: 10px; text-align: center;">#</th>\
+                        <th style="padding: 10px; text-align: left;">Equipo / Asesor</th>\
+                        <th style="padding: 10px; text-align: center; background: #2c7da0; color: white;">💰 ≥ $1,500</th>\
+                        <th style="padding: 10px; text-align: center; background: #52b788; color: white;">🛒 < $1,500</th>\
+                        <th style="padding: 10px; text-align: center;">📱 Total</th>\
+                    </tr>\
+                </thead>\
+                <tbody>';
     
-    let index = 1;
-    for (const equipo of equipos) {
-        tableHtml += `
-            <tr style="background-color: #e8f4f8; border-top: 2px solid #2c7da0;">
-                <td style="padding: 8px; text-align: center; font-weight: bold;">${index}</div>
-                <td style="padding: 8px; text-align: left; font-weight: bold; color: #2c7da0;">📁 ${equipo.nombre}</div>
-                <td style="padding: 8px; text-align: center; font-weight: bold; background: #2c7da015;">${equipo.equipoAlta}</div>
-                <td style="padding: 8px; text-align: center; font-weight: bold; background: #52b78815;">${equipo.equipoBaja}</div>
-                <td style="padding: 8px; text-align: center; font-weight: bold;">${equipo.equipoTotal}</div>
-            </tr>
-        `;
+    var index = 1;
+    for (var eIdx = 0; eIdx < equipos.length; eIdx++) {
+        var equipo = equipos[eIdx];
+        tableHtml += '\
+            <tr style="background-color: #e8f4f8; border-top: 2px solid #2c7da0;">\
+                <td style="padding: 8px; text-align: center; font-weight: bold;">' + index + '</td>\
+                <td style="padding: 8px; text-align: left; font-weight: bold; color: #2c7da0;">📁 ' + equipo.nombre + '</td>\
+                <td style="padding: 8px; text-align: center; font-weight: bold; background: #2c7da015;">' + equipo.equipoAlta + '</td>\
+                <td style="padding: 8px; text-align: center; font-weight: bold; background: #52b78815;">' + equipo.equipoBaja + '</td>\
+                <td style="padding: 8px; text-align: center; font-weight: bold;">' + equipo.equipoTotal + '</td>\
+            </tr>';
         index++;
         
-        tableHtml += `
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-                <td style="padding: 6px 8px; text-align: center;"></div>
-                <td style="padding: 6px 8px; text-align: left; padding-left: 28px;">👑 ${equipo.liderNombre}</div>
-                <td style="padding: 6px 8px; text-align: center;">${equipo.liderAlta}</div>
-                <td style="padding: 6px 8px; text-align: center;">${equipo.liderBaja}</div>
-                <td style="padding: 6px 8px; text-align: center; font-weight: bold;">${equipo.liderTotal}</div>
-            </tr>
-        `;
+        tableHtml += '\
+            <tr style="border-bottom: 1px solid #e2e8f0;">\
+                <td style="padding: 6px 8px; text-align: center;"></td>\
+                <td style="padding: 6px 8px; text-align: left; padding-left: 28px;">👑 ' + equipo.liderNombre + '</td>\
+                <td style="padding: 6px 8px; text-align: center;">' + equipo.liderAlta + '</td>\
+                <td style="padding: 6px 8px; text-align: center;">' + equipo.liderBaja + '</td>\
+                <td style="padding: 6px 8px; text-align: center; font-weight: bold;">' + equipo.liderTotal + '</td>\
+            </tr>';
         
-        for (const miembro of equipo.miembros) {
-            tableHtml += `
-                <tr style="border-bottom: 1px solid #e2e8f0;">
-                    <td style="padding: 6px 8px; text-align: center;"></div>
-                    <td style="padding: 6px 8px; text-align: left; padding-left: 28px;">└─ ${escapeHtml(miembro.nombre)}</div>
-                    <td style="padding: 6px 8px; text-align: center;">${miembro.alta}</div>
-                    <td style="padding: 6px 8px; text-align: center;">${miembro.baja}</div>
-                    <td style="padding: 6px 8px; text-align: center;">${miembro.total}</div>
-                </tr>
-            `;
+        for (var mIdx2 = 0; mIdx2 < equipo.miembros.length; mIdx2++) {
+            var miembro = equipo.miembros[mIdx2];
+            tableHtml += '\
+                <tr style="border-bottom: 1px solid #e2e8f0;">\
+                    <td style="padding: 6px 8px; text-align: center;"></td>\
+                    <td style="padding: 6px 8px; text-align: left; padding-left: 28px;">└─ ' + escapeHtml(miembro.nombre) + '</td>\
+                    <td style="padding: 6px 8px; text-align: center;">' + miembro.alta + '</td>\
+                    <td style="padding: 6px 8px; text-align: center;">' + miembro.baja + '</td>\
+                    <td style="padding: 6px 8px; text-align: center;">' + miembro.total + '</td>\
+                </tr>';
         }
     }
     
-    tableHtml += `
-                </tbody>
-            </table>
-        </div>
-    `;
+    tableHtml += '\
+                </tbody>\
+            </table>\
+        </div>';
     
     document.getElementById('asesorSummaryModalBody').innerHTML = tableHtml;
     modal.style.display = 'block';
     
-    // Event listener para exportar a Excel
-    const exportBtn = document.getElementById('exportExcelBtn');
+    var exportBtn = document.getElementById('exportExcelBtn');
     if (exportBtn) {
-        exportBtn.addEventListener('click', () => exportAsesorSummaryToExcel(equipos));
+        var newExportBtn = exportBtn.cloneNode(true);
+        exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
+        newExportBtn.addEventListener('click', function() { exportAsesorSummaryToExcel(equipos); });
     }
 }
 
-// Función para exportar a Excel
+// ==================== EXPORTAR RESUMEN DE ASESORES ====================
+
 function exportAsesorSummaryToExcel(equipos) {
-    // Preparar datos para Excel
-    const excelData = [
-        ['Resumen por Equipo - Ventas de Contado'],
+    if (!equipos || equipos.length === 0) {
+        alert('⚠️ No hay datos de equipos para exportar');
+        return;
+    }
+    
+    var data = obtenerDatosContado();
+    var fecha = 'No disponible';
+    if (data && data.date) {
+        fecha = data.date;
+    }
+    
+    var excelData = [
+        ['RESUMEN POR EQUIPO - VENTAS DE CONTADO'],
+        ['Fecha: ' + formatDate(fecha)],
         [],
-        ['#', 'Equipo / Asesor', 'Equipos ≥ $1,500', 'Equipos < $1,500', 'Total Equipos']
+        ['Equipo / Asesor', 'Equipos ≥ $1,500', 'Equipos < $1,500', 'Total Equipos']
     ];
     
-    let rowIndex = 1;
-    for (const equipo of equipos) {
-        // Fila del líder
-        excelData.push(['Lider', `${equipo.liderNombre}`, equipo.liderAlta, equipo.liderBaja, equipo.liderTotal]);
-        
-        // Filas de los miembros
-        for (const miembro of equipo.miembros) {
-            excelData.push(['', `${miembro.nombre}`, miembro.alta, miembro.baja, miembro.total]);
+    for (var i = 0; i < equipos.length; i++) {
+        var equipo = equipos[i];
+        excelData.push(['📁 ' + equipo.nombre + ' (TOTAL)', equipo.equipoAlta, equipo.equipoBaja, equipo.equipoTotal]);
+        excelData.push(['  👑 ' + equipo.liderNombre, equipo.liderAlta, equipo.liderBaja, equipo.liderTotal]);
+        for (var j = 0; j < equipo.miembros.length; j++) {
+            var miembro = equipo.miembros[j];
+            excelData.push(['  └─ ' + miembro.nombre, miembro.alta, miembro.baja, miembro.total]);
         }
-        
-        // Línea separadora
-        excelData.push(['', '', '', '', '']);
+        excelData.push(['', '', '', '']);
     }
     
-    // Agregar totales generales
-    const totalAlta = equipos.reduce((sum, e) => sum + e.equipoAlta, 0);
-    const totalBaja = equipos.reduce((sum, e) => sum + e.equipoBaja, 0);
-    const totalGeneral = equipos.reduce((sum, e) => sum + e.equipoTotal, 0);
+    var totalAlta = equipos.reduce(function(sum, e) { return sum + e.equipoAlta; }, 0);
+    var totalBaja = equipos.reduce(function(sum, e) { return sum + e.equipoBaja; }, 0);
+    var totalGeneral = equipos.reduce(function(sum, e) { return sum + e.equipoTotal; }, 0);
     
-    excelData.push(['', 'TOTAL GENERAL:', totalAlta, totalBaja, totalGeneral]);
+    excelData.push(['TOTAL GENERAL:', totalAlta, totalBaja, totalGeneral]);
     excelData.push([]);
+    excelData.push(['Nota:', 'Los líderes aparecen con 👑 y los miembros con └─']);
     
-    // Llamar a la función global de exportación
-    if (typeof exportToExcel === 'function') {
-        exportToExcel(excelData, `resumen_equipos_${cachedSalesData.date}`);
-    } else {
-        console.error('La función exportToExcel no está disponible. Asegúrate de incluir SheetJS en index.html');
-        alert('Error: No se pudo exportar. Verifica que la librería SheetJS esté cargada.');
+    try {
+        if (typeof XLSX !== 'undefined') {
+            var wb = XLSX.utils.book_new();
+            var ws = XLSX.utils.aoa_to_sheet(excelData);
+            ws['!cols'] = [{ wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 15 }];
+            XLSX.utils.book_append_sheet(wb, ws, 'Resumen Equipos');
+            XLSX.writeFile(wb, 'resumen_equipos_' + fecha + '.xlsx');
+            console.log('✅ Resumen exportado correctamente.');
+        } else {
+            exportToCSV(excelData, 'resumen_equipos_' + fecha);
+        }
+    } catch(e) {
+        console.error('❌ Error exportando resumen:', e);
+        exportToCSV(excelData, 'resumen_equipos_' + fecha);
     }
 }
 
-// ==================== ANÁLISIS DE MARKUP GENERAL PARA CONTADO ====================
+// ==================== ANÁLISIS DE MARKUP (CORREGIDO) ====================
 
-// Variable para almacenar si ya se analizó en la consulta actual
-let markupAnalizadoEnConsultaActual = false;
-let cachedMarkupResults = null;
+var markupAnalizadoEnConsultaActual = false;
+var cachedMarkupResults = null;
 
-// Función principal para analizar markup de todos los equipos
-async function analyzeAllMarkup() {
-    // Verificar que existan datos de ventas
-    if (!cachedSalesData || !cachedSalesData.results || cachedSalesData.results.length === 0) {
+function analyzeAllMarkup() {
+    console.log('📊 [MARKUP] Iniciando análisis de markup...');
+    
+    var data = obtenerDatosContado();
+    if (!data || !data.results || data.results.length === 0) {
         showError('contado', 'Primero consulta las ventas del día');
         return;
     }
     
-    // Verificar si ya se analizó en esta consulta
     if (markupAnalizadoEnConsultaActual) {
-        showInfo('contado', '⚠️ Ya se analizó el markup de esta consulta. Consulta otra fecha para volver a analizar.', true);
+        showInfo('contado', '⚠️ Ya se analizó el markup de esta consulta.', true);
         return;
     }
     
-    const btnCard = document.getElementById('btnAnalyzeAllMarkup');
+    var btnCard = document.getElementById('btnAnalyzeAllMarkup');
     if (!btnCard) return;
     
-    // Guardar contenido original
-    const originalContent = btnCard.innerHTML;
-    
-    // Cambiar a modo "analizando"
-    btnCard.innerHTML = `
-        <div class="stat-number">
-            <span class="loading-spinner-small" style="width:24px;height:24px;border-width:3px;"></span>
-        </div>
-        <div class="stat-label">Analizando markup...</div>
-        <div style="font-size:0.65rem; margin-top:4px;">Obteniendo costos</div>
-    `;
+    var originalContent = btnCard.innerHTML;
+    btnCard.innerHTML = '\
+        <div class="stat-number">\
+            <span class="loading-spinner-small" style="width:24px;height:24px;border-width:3px;"></span>\
+        </div>\
+        <div class="stat-label">Analizando markup...</div>\
+        <div style="font-size:0.65rem; margin-top:4px;">Obteniendo costos</div>\
+    ';
     btnCard.style.cursor = 'wait';
     btnCard.disabled = true;
     
-    try {
-        const results = cachedSalesData.results;
-        const totalEquipos = results.length;
-        
-        // Arrays para almacenar resultados
-        const equiposConCosto = [];
-        const equiposSinCosto = [];
-        let sumaVentas = 0;
-        let sumaCostos = 0;
-        
-        // Procesar cada equipo en paralelo con límite de concurrencia
-        const concurrencyLimit = 10;
-        const batches = [];
-        
-        for (let i = 0; i < results.length; i += concurrencyLimit) {
-            batches.push(results.slice(i, i + concurrencyLimit));
-        }
-        
-        let procesados = 0;
-        
-        for (const batch of batches) {
-            const promises = batch.map(async (item) => {
+    (async function() {
+        try {
+            var results = data.results;
+            var totalEquipos = results.length;
+            var equiposConCosto = [];
+            var equiposSinCosto = [];
+            var sumaVentas = 0;
+            var sumaCostos = 0;
+            var productosSinCostoList = [];
+            
+            console.log('📊 [MARKUP] Procesando ' + totalEquipos + ' equipos...');
+            
+            for (var i = 0; i < results.length; i++) {
+                var item = results[i];
+                var productId = item.productId;
+                
+                if (!productId || productId === 0) {
+                    console.warn('⚠️ [MARKUP] Producto sin ID:', item.product);
+                    equiposSinCosto.push({
+                        imei: item.imei,
+                        producto: item.product,
+                        precioVenta: item.price,
+                        razon: 'Sin productId'
+                    });
+                    productosSinCostoList.push(item.product);
+                    continue;
+                }
+                
                 try {
-                    const costData = await fetchProductCost(item.productId);
+                    var costData = await fetchProductCost(productId);
                     
-                    if (costData && costData.costoConIva > 0) {
-                        const costoConIva = costData.costoConIva;
-                        const precioVenta = item.price;
-                        const utilidad = precioVenta - costoConIva;
-                        const margen = precioVenta > 0 ? (utilidad / precioVenta) * 100 : 0;
+                    // Verificar si el costo es válido (estructura correcta)
+                    var costoConIva = 0;
+                    if (costData && costData.costoConIva !== undefined && costData.costoConIva !== null) {
+                        costoConIva = costData.costoConIva;
+                    } else if (costData && typeof costData === 'number') {
+                        costoConIva = costData * 1.16;
+                    } else if (costData && costData.cost !== undefined) {
+                        costoConIva = parseFloat(costData.cost) * 1.16;
+                    } else if (costData && costData.data && costData.data.cost !== undefined) {
+                        costoConIva = parseFloat(costData.data.cost) * 1.16;
+                    }
+                    
+                    console.log('📊 [MARKUP] Producto ' + productId + ' - ' + item.product + ': costoConIva =', costoConIva);
+                    
+                    if (costoConIva > 0) {
+                        var precioVenta = item.price;
+                        var utilidad = precioVenta - costoConIva;
+                        var margen = precioVenta > 0 ? (utilidad / precioVenta) * 100 : 0;
                         
-                        return {
+                        equiposConCosto.push({
                             success: true,
                             imei: item.imei,
                             producto: item.product,
@@ -593,132 +943,153 @@ async function analyzeAllMarkup() {
                             utilidad: utilidad,
                             margen: margen,
                             vendedor: item.seller,
-                            linea: item.line
-                        };
+                            linea: item.line,
+                            branch: item.branch,
+                            ruta: item.ruta
+                        });
+                        sumaVentas += precioVenta;
+                        sumaCostos += costoConIva;
                     } else {
-                        return {
-                            success: false,
+                        console.warn('⚠️ [MARKUP] Costo no válido para:', item.product, costData);
+                        equiposSinCosto.push({
                             imei: item.imei,
                             producto: item.product,
                             precioVenta: item.price,
-                            razon: 'No se encontró costo del producto'
-                        };
+                            razon: 'Costo no disponible o 0'
+                        });
+                        productosSinCostoList.push(item.product);
                     }
                 } catch (error) {
-                    return {
-                        success: false,
+                    console.warn('⚠️ [MARKUP] Error obteniendo costo para:', item.product, error);
+                    equiposSinCosto.push({
                         imei: item.imei,
                         producto: item.product,
                         precioVenta: item.price,
-                        razon: `Error: ${error.message}`
-                    };
+                        razon: 'Error: ' + error.message
+                    });
+                    productosSinCostoList.push(item.product);
                 }
-            });
-            
-            const batchResults = await Promise.all(promises);
-            
-            for (const result of batchResults) {
-                if (result.success) {
-                    equiposConCosto.push(result);
-                    sumaVentas += result.precioVenta;
-                    sumaCostos += result.costo;
-                } else {
-                    equiposSinCosto.push(result);
-                }
+                
+                // Actualizar progreso
+                var progreso = Math.round(((i + 1) / totalEquipos) * 100);
+                btnCard.innerHTML = '\
+                    <div class="stat-number">\
+                        <span class="loading-spinner-small" style="width:24px;height:24px;border-width:3px;"></span>\
+                    </div>\
+                    <div class="stat-label">Analizando markup...</div>\
+                    <div style="font-size:0.65rem; margin-top:4px;">' + (i + 1) + '/' + totalEquipos + ' equipos (' + progreso + '%)</div>\
+                ';
             }
             
-            procesados += batch.length;
+            var equiposConCostoCount = equiposConCosto.length;
+            var utilidadTotal = sumaVentas - sumaCostos;
+            var margenPromedio = sumaVentas > 0 ? (utilidadTotal / sumaVentas) * 100 : 0;
             
-            // Actualizar progreso
-            btnCard.innerHTML = `
-                <div class="stat-number">
-                    <span class="loading-spinner-small" style="width:24px;height:24px;border-width:3px;"></span>
-                </div>
-                <div class="stat-label">Analizando markup...</div>
-                <div style="font-size:0.65rem; margin-top:4px;">${procesados}/${totalEquipos} equipos</div>
-            `;
+            console.log('📊 [MARKUP] RESULTADOS:');
+            console.log('  Equipos con costo:', equiposConCostoCount);
+            console.log('  Equipos sin costo:', equiposSinCosto.length);
+            console.log('  Suma Ventas:', sumaVentas);
+            console.log('  Suma Costos:', sumaCostos);
+            console.log('  Utilidad Total:', utilidadTotal);
+            console.log('  Margen Promedio:', margenPromedio);
+            
+            if (productosSinCostoList.length > 0) {
+                console.log('  Productos sin costo:', productosSinCostoList);
+            }
+            
+            // Mostrar los equipos con costo para depuración
+            if (equiposConCosto.length > 0) {
+                console.log('  Primer equipo con costo:', equiposConCosto[0]);
+            }
+            
+            cachedMarkupResults = {
+                fecha: data.date,
+                equiposConCosto: equiposConCosto,
+                equiposSinCosto: equiposSinCosto,
+                totalEquipos: totalEquipos,
+                equiposAnalizados: equiposConCostoCount,
+                sumaVentas: sumaVentas,
+                sumaCostos: sumaCostos,
+                utilidadTotal: utilidadTotal,
+                margenPromedio: margenPromedio,
+                productosSinCostoList: productosSinCostoList
+            };
+            
+            var warningHtml = '';
+            if (equiposSinCosto.length > 0) {
+                var listaProductos = productosSinCostoList.slice(0, 5).join(', ');
+                if (productosSinCostoList.length > 5) {
+                    listaProductos += '... y ' + (productosSinCostoList.length - 5) + ' más';
+                }
+                warningHtml = '\
+                    <div style="font-size:0.6rem; margin-top:8px; color:#fcd34d; cursor:help; border-top:1px solid rgba(255,255,255,0.2); padding-top:6px;" \
+                         title="Equipos sin costo: ' + equiposSinCosto.length + ' de ' + totalEquipos + '\\n' + listaProductos + '">\
+                        ⚠️ ' + equiposSinCosto.length + ' equipos sin costo\
+                    </div>\
+                ';
+            }
+            
+            if (equiposConCostoCount > 0) {
+                btnCard.innerHTML = '\
+                    <div class="stat-number" style="font-size:1.5rem;">' + margenPromedio.toFixed(1) + '%</div>\
+                    <div class="stat-label">📊 Markup Promedio</div>\
+                    <div style="font-size:0.7rem; margin-top:4px;">\
+                        Utilidad: ' + new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 }).format(utilidadTotal) + '\
+                    </div>\
+                    <div style="font-size:0.6rem; margin-top:2px; opacity:0.8;">\
+                        Basado en ' + equiposConCostoCount + '/' + totalEquipos + ' equipos\
+                    </div>\
+                    ' + warningHtml + '\
+                ';
+                showInfo('contado', '✅ Análisis completado: ' + margenPromedio.toFixed(1) + '% de markup promedio (Utilidad: ' + new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(utilidadTotal) + ')', false);
+            } else {
+                btnCard.innerHTML = '\
+                    <div class="stat-number" style="font-size:1.2rem;">⚠️</div>\
+                    <div class="stat-label">Sin datos de costo</div>\
+                    <div style="font-size:0.6rem; margin-top:4px; opacity:0.8;">' + totalEquipos + ' equipos sin costo</div>\
+                    ' + warningHtml + '\
+                ';
+                showInfo('contado', '⚠️ No se pudo calcular el markup: ningún producto tiene costo registrado', true);
+            }
+            btnCard.style.cursor = 'pointer';
+            btnCard.disabled = false;
+            
+            markupAnalizadoEnConsultaActual = true;
+            
+        } catch (error) {
+            console.error('❌ [MARKUP] Error en análisis:', error);
+            btnCard.innerHTML = originalContent;
+            btnCard.style.cursor = 'pointer';
+            btnCard.disabled = false;
+            showError('contado', 'Error al analizar markup: ' + error.message);
         }
-        
-        // Calcular resultados finales
-        const equiposConCostoCount = equiposConCosto.length;
-        const utilidadTotal = sumaVentas - sumaCostos;
-        const margenPromedio = sumaVentas > 0 ? (utilidadTotal / sumaVentas) * 100 : 0;
-        
-        // Guardar caché para posible uso futuro
-        cachedMarkupResults = {
-            fecha: cachedSalesData.date,
-            equiposConCosto: equiposConCosto,
-            equiposSinCosto: equiposSinCosto,
-            totalEquipos: totalEquipos,
-            equiposAnalizados: equiposConCostoCount,
-            sumaVentas: sumaVentas,
-            sumaCostos: sumaCostos,
-            utilidadTotal: utilidadTotal,
-            margenPromedio: margenPromedio
-        };
-        
-        // Actualizar la tarjeta con los resultados
-        let warningHtml = '';
-        if (equiposSinCosto.length > 0) {
-            const listaSinCosto = equiposSinCosto.map(e => `📱 ${e.producto.substring(0, 30)} (IMEI: ${e.imei})`).join('<br>');
-            warningHtml = `
-                <div style="font-size:0.6rem; margin-top:8px; color:#fcd34d; cursor:help; border-top:1px solid rgba(255,255,255,0.2); padding-top:6px;" 
-                     title="Equipos sin costo: ${equiposSinCosto.length} de ${totalEquipos}">
-                    ⚠️ ${equiposSinCosto.length} equipos sin costo
-                </div>
-            `;
-        }
-        
-        btnCard.innerHTML = `
-            <div class="stat-number" style="font-size:1.5rem;">${margenPromedio.toFixed(1)}%</div>
-            <div class="stat-label">📊 Markup Promedio</div>
-            <div style="font-size:0.7rem; margin-top:4px;">
-                Utilidad: ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 }).format(utilidadTotal)}
-            </div>
-            <div style="font-size:0.6rem; margin-top:2px; opacity:0.8;">
-                Basado en ${equiposConCostoCount}/${totalEquipos} equipos
-            </div>
-            ${warningHtml}
-        `;
-        btnCard.style.cursor = 'pointer';
-        btnCard.disabled = false;
-        
-        // Marcar como analizado
-        markupAnalizadoEnConsultaActual = true;
-        
-        // Mostrar mensaje de éxito
-        showInfo('contado', `✅ Análisis completado: ${margenPromedio.toFixed(1)}% de markup promedio (Utilidad: ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(utilidadTotal)})`, false);
-        
-        // Si hay equipos sin costo, mostrar advertencia con tooltip
-        if (equiposSinCosto.length > 0) {
-            console.warn(`Equipos sin costo (${equiposSinCosto.length}):`, equiposSinCosto);
-        }
-        
-    } catch (error) {
-        console.error('Error en análisis de markup:', error);
-        
-        // Restaurar botón en caso de error
-        btnCard.innerHTML = originalContent;
-        btnCard.style.cursor = 'pointer';
-        btnCard.disabled = false;
-        
-        showError('contado', `Error al analizar markup: ${error.message}`);
-    }
+    })();
 }
 
-// Función para resetear el estado del análisis (cuando se consulta una nueva fecha)
 function resetMarkupAnalysis() {
     markupAnalizadoEnConsultaActual = false;
     cachedMarkupResults = null;
-    
-    const btnCard = document.getElementById('btnAnalyzeAllMarkup');
+    var btnCard = document.getElementById('btnAnalyzeAllMarkup');
     if (btnCard) {
-        btnCard.innerHTML = `
-            <div class="stat-number">📊</div>
-            <div class="stat-label">Analizar Markup</div>
-            <div style="font-size:0.65rem; margin-top:4px;">General del día</div>
-        `;
+        btnCard.innerHTML = '\
+            <div class="stat-number">📊</div>\
+            <div class="stat-label">Analizar Markup</div>\
+            <div style="font-size:0.65rem; margin-top:4px;">General del día</div>\
+        ';
         btnCard.style.cursor = 'pointer';
         btnCard.disabled = false;
     }
 }
+
+// ==================== EXPONER FUNCIONES GLOBALMENTE ====================
+window.generateSalesReportAllLines = generateSalesReportAllLines;
+window.exportAllContadoToExcel = exportAllContadoToExcel;
+window.openResumenModal = openResumenModal;
+window.openAnalysisModal = openAnalysisModal;
+window.openAsesorSummaryModal = openAsesorSummaryModal;
+window.exportAsesorSummaryToExcel = exportAsesorSummaryToExcel;
+window.analyzeAllMarkup = analyzeAllMarkup;
+window.resetMarkupAnalysis = resetMarkupAnalysis;
+window.obtenerDatosContado = obtenerDatosContado;
+
+console.log('✅ Módulo contado.js cargado correctamente');
