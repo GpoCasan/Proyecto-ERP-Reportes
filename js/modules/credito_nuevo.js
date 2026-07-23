@@ -514,7 +514,7 @@ function exportAllCreditToExcel() {
     
     var excelData = [
         ['REPORTE DE VENTAS A CRÉDITO'],
-        ['Fecha: ' + formatDate(date)],
+        ['Fecha: ' + formatDateInput(date)],
         ['Total de ventas: ' + results.length],
         [],
         ['#', 'Venta ID', 'Línea', 'Plataforma', 'IMEI', 'Producto', 'Ruta', 'Tienda', 'Vendedor', 'Enganche']
@@ -1115,7 +1115,7 @@ function exportCreditSummaryToExcel(equipos, plataformasList) {
     
     var excelData = [
         ['RESUMEN POR EQUIPO - VENTAS A CRÉDITO'],
-        ['Fecha: ' + formatDate(fecha)],
+        ['Fecha: ' + date],
         [],
         ['#', 'Equipo / Asesor', 'Total', 'Linea Nueva', 'LIBRE'].concat(plataformasFiltradas)
     ];

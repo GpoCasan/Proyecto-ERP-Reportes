@@ -20,43 +20,28 @@ function getRutaByBranch(branchName) {
     return 'Sin Ruta';
 }
 
-// ==================== FUNCIÓN PARA OBTENER DATOS ====================
-function obtenerDatosContado() {
-    console.log('🔍 [obtenerDatosContado] Buscando datos...');
-    
-    if (window.cachedSalesData && window.cachedSalesData.results && window.cachedSalesData.results.length > 0) {
-        console.log('✅ Datos obtenidos de window.cachedSalesData:', window.cachedSalesData.results.length);
-        return { date: window.cachedSalesData.date, results: window.cachedSalesData.results, allSales: [] };
-    }
-    
-    if (window._cachedContadoFullData && window._cachedContadoFullData.results && window._cachedContadoFullData.results.length > 0) {
-        console.log('✅ Datos obtenidos de window._cachedContadoFullData:', window._cachedContadoFullData.results.length);
-        return window._cachedContadoFullData;
-    }
-    
-    try {
-        var stored = sessionStorage.getItem('contadoData');
-        if (stored) {
-            var parsed = JSON.parse(stored);
-            if (parsed && parsed.results && parsed.results.length > 0) {
-                console.log('✅ Datos obtenidos de sessionStorage:', parsed.results.length);
-                return parsed;
+// Función para obtener el ICCID de una venta (buscando en TODOS los detalles)
+function obtenerIccidDeVenta(sale) {
+    var details = sale.details || [];
+    for (var dIdx = 0; dIdx < details.length; dIdx++) {
+        var detail = details[dIdx];
+        var groups = detail.specification_groups || [];
+        for (var gIdx = 0; gIdx < groups.length; gIdx++) {
+            var group = groups[gIdx];
+            var specs = group.specification_details || [];
+            for (var sIdx = 0; sIdx < specs.length; sIdx++) {
+                var spec = specs[sIdx];
+                // ICCID (product_specification_id === 2)
+                if (spec.product_specification_id === 2 && spec.value) {
+                    return spec.value;
+                }
+                // También por nombre de especificación
+                if (spec.specification && spec.specification.name === 'ICCID' && spec.value) {
+                    return spec.value;
+                }
             }
         }
-    } catch(e) {}
-    
-    try {
-        var stored2 = localStorage.getItem('contadoData');
-        if (stored2) {
-            var parsed2 = JSON.parse(stored2);
-            if (parsed2 && parsed2.results && parsed2.results.length > 0) {
-                console.log('✅ Datos obtenidos de localStorage:', parsed2.results.length);
-                return parsed2;
-            }
-        }
-    } catch(e) {}
-    
-    console.log('❌ No se encontraron datos en ninguna fuente');
+    }
     return null;
 }
 
@@ -112,6 +97,9 @@ function generateSalesReportAllLines() {
                 
                 var ruta = getRutaByBranch(branchName);
                 
+                // Obtener ICCID de TODA la venta (buscar en todos los detalles)
+                var iccidValue = obtenerIccidDeVenta(sale);
+                
                 var details = sale.details || [];
                 for (var dIdx = 0; dIdx < details.length; dIdx++) {
                     var detail = details[dIdx];
@@ -121,38 +109,61 @@ function generateSalesReportAllLines() {
                         var specs = group.specification_details || [];
                         for (var sIdx = 0; sIdx < specs.length; sIdx++) {
                             var spec = specs[sIdx];
-                            if (spec.specification && spec.specification.name === 'IMEI' && isValidImei(spec.value) && !map.has(spec.value)) {
-                                var isLibre = (detail.product && detail.product.name || '').toLowerCase().includes('libre');
-                                map.set(spec.value, {
-                                    imei: spec.value,
-                                    product: detail.product && detail.product.name || 'Desconocido',
-                                    price: parseFloat(detail.total_amount || detail.total || 0),
-                                    saleId: sale.id,
-                                    seller: sale.user && sale.user.name || 'No disponible',
-                                    sellerId: sale.user && sale.user.id || null,
-                                    line: isLibre ? 'Libre' : 'Telcel',
-                                    productId: detail.product && detail.product.id || null,
-                                    branch: branchName,
-                                    ruta: ruta
-                                });
+                            // Buscar IMEI (product_specification_id === 1)
+                            if (spec.product_specification_id === 1 && isValidImei(spec.value)) {
+                                var imeiValue = spec.value;
+                                
+                                if (!map.has(imeiValue)) {
+                                    var productName = '';
+                                    var productId = null;
+                                    var isLibre = false;
+                                    
+                                    if (detail.product && detail.product.name) {
+                                        productName = detail.product.name;
+                                        productId = detail.product.id;
+                                        isLibre = (productName || '').toLowerCase().includes('libre');
+                                    }
+                                    
+                                    var line = isLibre ? 'Libre' : 'Telcel';
+                                    var price = parseFloat(detail.total_amount || detail.total || 0);
+                                    
+                                    map.set(imeiValue, {
+                                        imei: imeiValue,
+                                        iccid: iccidValue || '',
+                                        product: productName || 'Desconocido',
+                                        price: price,
+                                        saleId: sale.id,
+                                        seller: sale.user && sale.user.name || 'No disponible',
+                                        sellerId: sale.user && sale.user.id || null,
+                                        line: line,
+                                        productId: productId || null,
+                                        branch: branchName,
+                                        ruta: ruta
+                                    });
+                                }
+                                break;
                             }
                         }
                     }
                 }
             }
+            
             var results = Array.from(map.values());
             
+            // ========== GUARDAR LA FECHA DE CONSULTA ==========
+            var fechaConsulta = date; // La fecha que seleccionó el usuario
+            
             // Guardar datos
-            window.cachedSalesData = { date: date, results: results };
+            window.cachedSalesData = { date: fechaConsulta, results: results };
             window._cachedContadoFullData = {
-                date: date,
+                date: fechaConsulta,
                 results: results,
                 allSales: sales
             };
             
             try {
                 var dataToStore = {
-                    date: date,
+                    date: fechaConsulta,
                     results: results,
                     allSales: sales || []
                 };
@@ -166,6 +177,7 @@ function generateSalesReportAllLines() {
             console.log('✅ DATOS GUARDADOS:');
             console.log('  window.cachedSalesData:', window.cachedSalesData ? window.cachedSalesData.results.length : 'null');
             console.log('  window._cachedContadoFullData:', window._cachedContadoFullData ? window._cachedContadoFullData.results.length : 'null');
+            console.log('  Fecha consulta:', fechaConsulta);
             
             var statsHtml = '\
                 <button class="stat-card-btn" data-filter="all"><div class="stat-number">' + results.length + '</div><div class="stat-label">📱 Total IMEIs</div></button>\
@@ -220,7 +232,7 @@ function generateSalesReportAllLines() {
                 ';
             }
             
-            // ========== TABLA REORDENADA: VENTA | LÍNEA | IMEI | PRODUCTO | RUTA | SUCURSAL | VENDEDOR | PRECIO | ACCIÓN ==========
+            // ========== TABLA: RUTA | SUCURSAL | VENDEDOR | IMEI | ICCID | MODELO | PRECIO ==========
             if (highPriceResults.length > 0) {
                 html += '\
                     <div class="section-header" style="background-color: #2c7da0; color: white; padding: 8px 12px; margin-top: 10px; border-radius: 8px;">\
@@ -231,14 +243,13 @@ function generateSalesReportAllLines() {
                             <tr>\
                                 <th>#</th>\
                                 <th>Venta</th>\
-                                <th>Línea</th>\
-                                <th>IMEI</th>\
-                                <th>Producto</th>\
                                 <th>Ruta</th>\
                                 <th>Sucursal</th>\
                                 <th>Vendedor</th>\
+                                <th>IMEI</th>\
+                                <th>ICCID</th>\
+                                <th>Modelo</th>\
                                 <th>Precio</th>\
-                                <th>Acción</th>\
                             </tr>\
                         </thead>\
                         <tbody>';
@@ -247,14 +258,13 @@ function generateSalesReportAllLines() {
                     html += '<tr>\
                         <td>' + (i+1) + '</td>\
                         <td><button class="badge-sale-id" onclick="openReceipt(' + item.saleId + ')">📄 #' + item.saleId + '</button></td>\
-                        <td><span class="badge-' + (item.line==='Telcel'?'telcel':'libre') + '">📱 ' + item.line + '</span></td>\
-                        <td><code>' + item.imei + '</code></td>\
-                        <td>' + escapeHtml(item.product) + '</td>\
                         <td><span style="background: ' + (item.ruta === 'Sin Ruta' ? '#94a3b8' : '#f97316') + '; color: white; padding: 2px 10px; border-radius: 12px; font-size: 0.65rem;">' + item.ruta + '</span></td>\
                         <td>' + escapeHtml(item.branch) + '</td>\
                         <td>' + escapeHtml(item.seller) + '</td>\
-                        <td>$' + item.price.toFixed(2) + ' MXN</td>\
-                        <td><button class="btn-analyze" data-imei="' + item.imei + '" data-price="' + item.price + '" data-date="' + date + '">🔍 Analizar</button></td>\
+                        <td><code>' + item.imei + '</code></td>\
+                        <td><code style="font-size: 0.7rem;">' + (item.iccid ? item.iccid : '<span style="color: #94a3b8;">N/A</span>') + '</code></td>\
+                        <td>' + escapeHtml(item.product) + '</td>\
+                        <td style="text-align: right; font-weight: bold;">$' + item.price.toFixed(2) + ' MXN</td>\
                     </tr>';
                 }
                 html += '</tbody></table>';
@@ -270,14 +280,13 @@ function generateSalesReportAllLines() {
                             <tr>\
                                 <th>#</th>\
                                 <th>Venta</th>\
-                                <th>Línea</th>\
-                                <th>IMEI</th>\
-                                <th>Producto</th>\
                                 <th>Ruta</th>\
                                 <th>Sucursal</th>\
                                 <th>Vendedor</th>\
+                                <th>IMEI</th>\
+                                <th>ICCID</th>\
+                                <th>Modelo</th>\
                                 <th>Precio</th>\
-                                <th>Acción</th>\
                             </tr>\
                         </thead>\
                         <tbody>';
@@ -286,14 +295,13 @@ function generateSalesReportAllLines() {
                     html += '<tr>\
                         <td>' + (j+1) + '</td>\
                         <td><button class="badge-sale-id" onclick="openReceipt(' + item2.saleId + ')">📄 #' + item2.saleId + '</button></td>\
-                        <td><span class="badge-' + (item2.line==='Telcel'?'telcel':'libre') + '">📱 ' + item2.line + '</span></td>\
-                        <td><code>' + item2.imei + '</code></td>\
-                        <td>' + escapeHtml(item2.product) + '</td>\
                         <td><span style="background: ' + (item2.ruta === 'Sin Ruta' ? '#94a3b8' : '#f97316') + '; color: white; padding: 2px 10px; border-radius: 12px; font-size: 0.65rem;">' + item2.ruta + '</span></td>\
                         <td>' + escapeHtml(item2.branch) + '</td>\
                         <td>' + escapeHtml(item2.seller) + '</td>\
-                        <td>$' + item2.price.toFixed(2) + ' MXN</td>\
-                        <td><button class="btn-analyze" data-imei="' + item2.imei + '" data-price="' + item2.price + '" data-date="' + date + '">🔍 Analizar</button></td>\
+                        <td><code>' + item2.imei + '</code></td>\
+                        <td><code style="font-size: 0.7rem;">' + (item2.iccid ? item2.iccid : '<span style="color: #94a3b8;">N/A</span>') + '</code></td>\
+                        <td>' + escapeHtml(item2.product) + '</td>\
+                        <td style="text-align: right; font-weight: bold;">$' + item2.price.toFixed(2) + ' MXN</td>\
                     </tr>';
                 }
                 html += '</tbody></table>';
@@ -303,12 +311,7 @@ function generateSalesReportAllLines() {
             document.getElementById('contadoResults').innerHTML = html;
             document.getElementById('contadoResults').style.display = 'block';
             
-            document.querySelectorAll('#contadoResults .btn-analyze').forEach(function(btn) {
-                btn.addEventListener('click', function(e) {
-                    openAnalysisModal(btn.dataset.imei, parseFloat(btn.dataset.price), btn.dataset.date, 'Contado');
-                });
-            });
-            
+            // Eventos de estadísticas
             document.querySelectorAll('#contadoStats .stat-card-btn[data-filter]').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     openResumenModal(btn.getAttribute('data-filter'));
@@ -368,12 +371,13 @@ function exportAllContadoToExcel() {
         return;
     }
     
-    var date = data.date;
+    var date = data.date; // Fecha de consulta (la que seleccionó el usuario)
     var results = data.results;
     
     console.log('📊 Exportando ' + results.length + ' registros...');
+    console.log('📅 Fecha de consulta:', date);
     
-    // ========== EXPORTAR CON EL MISMO ORDEN: VENTA | LÍNEA | IMEI | PRODUCTO | RUTA | SUCURSAL | VENDEDOR | PRECIO ==========
+    // ========== EXPORTAR CON ORDEN: RUTA | SUCURSAL | VENDEDOR | IMEI | ICCID | MODELO | PRECIO ==========
     var sortedResults = [].concat(results).sort(function(a, b) {
         var rutaCompare = (a.ruta || 'Sin Ruta').localeCompare(b.ruta || 'Sin Ruta');
         if (rutaCompare !== 0) return rutaCompare;
@@ -384,22 +388,22 @@ function exportAllContadoToExcel() {
     
     var excelData = [
         ['REPORTE DE VENTAS DE CONTADO'],
-        ['Fecha: ' + formatDate(date)],
+        ['Fecha consultada: ' + formatDateInput(date)],
         ['Total de equipos: ' + results.length],
         [],
-        ['#', 'Venta ID', 'Línea', 'IMEI', 'Producto', 'Ruta', 'Sucursal', 'Vendedor', 'Precio']
+        ['#', 'Venta', 'Ruta', 'Sucursal', 'Vendedor', 'IMEI', 'ICCID', 'Modelo', 'Precio']
     ];
     
     sortedResults.forEach(function(item, index) {
         excelData.push([
             index + 1,
             item.saleId || 'N/A',
-            item.line || 'N/A',
-            item.imei || 'N/A',
-            item.product || 'N/A',
             item.ruta || 'Sin Ruta',
             item.branch || 'No disponible',
             item.seller || 'N/A',
+            item.imei || 'N/A',
+            item.iccid || 'N/A',
+            item.product || 'N/A',
             (item.price || 0).toFixed(2)
         ]);
     });
@@ -407,14 +411,17 @@ function exportAllContadoToExcel() {
     var totalContado = results.reduce(function(sum, r) { return sum + (r.price || 0); }, 0);
     var totalTelcel = results.filter(function(r) { return r.line === 'Telcel'; }).length;
     var totalLibre = results.filter(function(r) { return r.line === 'Libre'; }).length;
+    var conIccid = results.filter(function(r) { return r.iccid && r.iccid !== ''; }).length;
     
     excelData.push([]);
     excelData.push(['RESUMEN']);
     excelData.push(['Total Equipos', results.length]);
     excelData.push(['Total Telcel', totalTelcel]);
     excelData.push(['Total Libre', totalLibre]);
+    excelData.push(['Con ICCID', conIccid]);
     excelData.push(['Monto Total', totalContado.toFixed(2)]);
     
+    // Resumen por ruta
     var rutasUnicas = [];
     var rutaSet = new Set();
     results.forEach(function(r) { rutaSet.add(r.ruta || 'Sin Ruta'); });
@@ -437,8 +444,8 @@ function exportAllContadoToExcel() {
             var wb = XLSX.utils.book_new();
             var ws = XLSX.utils.aoa_to_sheet(excelData);
             ws['!cols'] = [
-                { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 18 },
-                { wch: 35 }, { wch: 12 }, { wch: 25 }, { wch: 25 }, { wch: 15 }
+                { wch: 5 }, { wch: 12 }, { wch: 12 }, { wch: 25 },
+                { wch: 25 }, { wch: 18 }, { wch: 22 }, { wch: 35 }, { wch: 15 }
             ];
             XLSX.utils.book_append_sheet(wb, ws, 'Ventas Contado');
             XLSX.writeFile(wb, 'ventas_contado_' + date + '.xlsx');
@@ -454,6 +461,47 @@ function exportAllContadoToExcel() {
         exportToCSV(excelData, 'ventas_contado_' + date);
         showInfo('contado', '✅ Exportadas ' + results.length + ' ventas a CSV (fallback)');
     }
+}
+
+// ==================== FUNCIÓN PARA OBTENER DATOS ====================
+
+function obtenerDatosContado() {
+    console.log('🔍 [obtenerDatosContado] Buscando datos...');
+    
+    if (window.cachedSalesData && window.cachedSalesData.results && window.cachedSalesData.results.length > 0) {
+        console.log('✅ Datos obtenidos de window.cachedSalesData:', window.cachedSalesData.results.length);
+        return { date: window.cachedSalesData.date, results: window.cachedSalesData.results, allSales: [] };
+    }
+    
+    if (window._cachedContadoFullData && window._cachedContadoFullData.results && window._cachedContadoFullData.results.length > 0) {
+        console.log('✅ Datos obtenidos de window._cachedContadoFullData:', window._cachedContadoFullData.results.length);
+        return window._cachedContadoFullData;
+    }
+    
+    try {
+        var stored = sessionStorage.getItem('contadoData');
+        if (stored) {
+            var parsed = JSON.parse(stored);
+            if (parsed && parsed.results && parsed.results.length > 0) {
+                console.log('✅ Datos obtenidos de sessionStorage:', parsed.results.length);
+                return parsed;
+            }
+        }
+    } catch(e) {}
+    
+    try {
+        var stored2 = localStorage.getItem('contadoData');
+        if (stored2) {
+            var parsed2 = JSON.parse(stored2);
+            if (parsed2 && parsed2.results && parsed2.results.length > 0) {
+                console.log('✅ Datos obtenidos de localStorage:', parsed2.results.length);
+                return parsed2;
+            }
+        }
+    } catch(e) {}
+    
+    console.log('❌ No se encontraron datos en ninguna fuente');
+    return null;
 }
 
 // ==================== RESUMEN POR MODELO ====================
@@ -524,46 +572,6 @@ function openResumenModal(filter) {
     tableHtml += '</tbody></table></div>';
     document.getElementById('resumenModalBody').innerHTML = tableHtml;
     modal.style.display = 'block';
-}
-
-// ==================== ANÁLISIS DE EQUIPO ====================
-
-function openAnalysisModal(imei, salePrice, saleDate, saleType) {
-    var modal = document.getElementById('analysisModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'analysisModal';
-        modal.className = 'modal';
-        modal.innerHTML = '<div class="modal-content"><div class="modal-header"><h3>📊 Análisis de equipo</h3><span class="close-modal">&times;</span></div><div class="modal-body" id="modalBody"><div class="loader-modal"><div class="spinner-modal"></div><p>Cargando información del equipo...</p></div></div></div>';
-        document.body.appendChild(modal);
-        modal.querySelector('.close-modal').onclick = function() { modal.style.display = 'none'; };
-        window.onclick = function(e) { if (e.target === modal) modal.style.display = 'none'; };
-    }
-    modal.style.display = 'block';
-    
-    (async function() {
-        try {
-            var inv = await fetchInventoryCost(imei);
-            var cost = parseFloat(inv.cost) || 0;
-            var costConIva = cost * 1.16;
-            var markup = salePrice - costConIva;
-            var margin = salePrice > 0 ? (markup / salePrice) * 100 : 0;
-            
-            document.getElementById('modalBody').innerHTML = '\
-                <div class="analysis-card-info">\
-                    <h4>📱 ' + escapeHtml(inv.stock && inv.stock.product && inv.stock.product.name || 'Producto') + '</h4>\
-                    <div class="analysis-row"><span class="analysis-label">IMEI:</span><span class="analysis-value"><code>' + imei + '</code></span></div>\
-                    <div class="analysis-row"><span class="analysis-label">Costo + IVA:</span><span class="analysis-value">$' + costConIva.toFixed(2) + ' MXN</span></div>\
-                    <div class="analysis-row"><span class="analysis-label">Precio Venta:</span><span class="analysis-value">$' + salePrice.toFixed(2) + ' MXN</span></div>\
-                </div>\
-                <div class="grid-2cols">\
-                    <div class="markup-card"><div class="value">$' + markup.toFixed(2) + ' MXN</div><div>💰 Utilidad</div></div>\
-                    <div class="margin-card"><div class="value">' + margin.toFixed(1) + '%</div><div>📊 Margen</div></div>\
-                </div>';
-        } catch(e) { 
-            document.getElementById('modalBody').innerHTML = '<div class="alert alert-error">❌ Error: ' + e.message + '</div>'; 
-        }
-    })();
 }
 
 // ==================== RESUMEN DE ASESORES ====================
@@ -803,10 +811,7 @@ function exportAsesorSummaryToExcel(equipos) {
     }
     
     var data = obtenerDatosContado();
-    var fecha = 'No disponible';
-    if (data && data.date) {
-        fecha = data.date;
-    }
+    var fecha = data && data.date || 'No disponible';
     
     var excelData = [
         ['RESUMEN POR EQUIPO - VENTAS DE CONTADO'],
@@ -851,7 +856,7 @@ function exportAsesorSummaryToExcel(equipos) {
     }
 }
 
-// ==================== ANÁLISIS DE MARKUP (CORREGIDO) ====================
+// ==================== ANÁLISIS DE MARKUP ====================
 
 var markupAnalizadoEnConsultaActual = false;
 var cachedMarkupResults = null;
@@ -892,7 +897,6 @@ function analyzeAllMarkup() {
             var equiposSinCosto = [];
             var sumaVentas = 0;
             var sumaCostos = 0;
-            var productosSinCostoList = [];
             
             console.log('📊 [MARKUP] Procesando ' + totalEquipos + ' equipos...');
             
@@ -901,21 +905,18 @@ function analyzeAllMarkup() {
                 var productId = item.productId;
                 
                 if (!productId || productId === 0) {
-                    console.warn('⚠️ [MARKUP] Producto sin ID:', item.product);
                     equiposSinCosto.push({
                         imei: item.imei,
                         producto: item.product,
                         precioVenta: item.price,
                         razon: 'Sin productId'
                     });
-                    productosSinCostoList.push(item.product);
                     continue;
                 }
                 
                 try {
                     var costData = await fetchProductCost(productId);
                     
-                    // Verificar si el costo es válido (estructura correcta)
                     var costoConIva = 0;
                     if (costData && costData.costoConIva !== undefined && costData.costoConIva !== null) {
                         costoConIva = costData.costoConIva;
@@ -926,8 +927,6 @@ function analyzeAllMarkup() {
                     } else if (costData && costData.data && costData.data.cost !== undefined) {
                         costoConIva = parseFloat(costData.data.cost) * 1.16;
                     }
-                    
-                    console.log('📊 [MARKUP] Producto ' + productId + ' - ' + item.product + ': costoConIva =', costoConIva);
                     
                     if (costoConIva > 0) {
                         var precioVenta = item.price;
@@ -945,39 +944,35 @@ function analyzeAllMarkup() {
                             vendedor: item.seller,
                             linea: item.line,
                             branch: item.branch,
-                            ruta: item.ruta
+                            ruta: item.ruta,
+                            iccid: item.iccid
                         });
                         sumaVentas += precioVenta;
                         sumaCostos += costoConIva;
                     } else {
-                        console.warn('⚠️ [MARKUP] Costo no válido para:', item.product, costData);
                         equiposSinCosto.push({
                             imei: item.imei,
                             producto: item.product,
                             precioVenta: item.price,
-                            razon: 'Costo no disponible o 0'
+                            razon: 'Costo no disponible'
                         });
-                        productosSinCostoList.push(item.product);
                     }
                 } catch (error) {
-                    console.warn('⚠️ [MARKUP] Error obteniendo costo para:', item.product, error);
                     equiposSinCosto.push({
                         imei: item.imei,
                         producto: item.product,
                         precioVenta: item.price,
                         razon: 'Error: ' + error.message
                     });
-                    productosSinCostoList.push(item.product);
                 }
                 
-                // Actualizar progreso
                 var progreso = Math.round(((i + 1) / totalEquipos) * 100);
                 btnCard.innerHTML = '\
                     <div class="stat-number">\
                         <span class="loading-spinner-small" style="width:24px;height:24px;border-width:3px;"></span>\
                     </div>\
                     <div class="stat-label">Analizando markup...</div>\
-                    <div style="font-size:0.65rem; margin-top:4px;">' + (i + 1) + '/' + totalEquipos + ' equipos (' + progreso + '%)</div>\
+                    <div style="font-size:0.65rem; margin-top:4px;">' + (i + 1) + '/' + totalEquipos + ' (' + progreso + '%)</div>\
                 ';
             }
             
@@ -993,15 +988,6 @@ function analyzeAllMarkup() {
             console.log('  Utilidad Total:', utilidadTotal);
             console.log('  Margen Promedio:', margenPromedio);
             
-            if (productosSinCostoList.length > 0) {
-                console.log('  Productos sin costo:', productosSinCostoList);
-            }
-            
-            // Mostrar los equipos con costo para depuración
-            if (equiposConCosto.length > 0) {
-                console.log('  Primer equipo con costo:', equiposConCosto[0]);
-            }
-            
             cachedMarkupResults = {
                 fecha: data.date,
                 equiposConCosto: equiposConCosto,
@@ -1011,15 +997,14 @@ function analyzeAllMarkup() {
                 sumaVentas: sumaVentas,
                 sumaCostos: sumaCostos,
                 utilidadTotal: utilidadTotal,
-                margenPromedio: margenPromedio,
-                productosSinCostoList: productosSinCostoList
+                margenPromedio: margenPromedio
             };
             
             var warningHtml = '';
             if (equiposSinCosto.length > 0) {
-                var listaProductos = productosSinCostoList.slice(0, 5).join(', ');
-                if (productosSinCostoList.length > 5) {
-                    listaProductos += '... y ' + (productosSinCostoList.length - 5) + ' más';
+                var listaProductos = equiposSinCosto.slice(0, 5).map(function(e) { return e.producto; }).join(', ');
+                if (equiposSinCosto.length > 5) {
+                    listaProductos += '... y ' + (equiposSinCosto.length - 5) + ' más';
                 }
                 warningHtml = '\
                     <div style="font-size:0.6rem; margin-top:8px; color:#fcd34d; cursor:help; border-top:1px solid rgba(255,255,255,0.2); padding-top:6px;" \
@@ -1085,7 +1070,6 @@ function resetMarkupAnalysis() {
 window.generateSalesReportAllLines = generateSalesReportAllLines;
 window.exportAllContadoToExcel = exportAllContadoToExcel;
 window.openResumenModal = openResumenModal;
-window.openAnalysisModal = openAnalysisModal;
 window.openAsesorSummaryModal = openAsesorSummaryModal;
 window.exportAsesorSummaryToExcel = exportAsesorSummaryToExcel;
 window.analyzeAllMarkup = analyzeAllMarkup;

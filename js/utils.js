@@ -250,6 +250,20 @@ async function loginPayJoy() {
     } catch(e) { throw e; }
 }
 
+// ==================== FORMATO DE FECHA SIN ZONA HORARIA ====================
+function formatDateInput(dateStr) {
+    if (!dateStr) return 'No disponible';
+    var parts = dateStr.split('-');
+    if (parts.length === 3) {
+        var year = parts[0];
+        var month = parts[1];
+        var day = parts[2];
+        // Formato: DD/MM/YYYY
+        return day + '/' + month + '/' + year;
+    }
+    return dateStr;
+}
+
 async function getValidToken() {
     if (!currentPayJoyToken || (tokenExpirationTime && Date.now() >= tokenExpirationTime)) await loginPayJoy();
     return currentPayJoyToken;
