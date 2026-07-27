@@ -106,7 +106,7 @@ const TEAM_STRUCTURE = {
     "👑 Lider F": {
         liderId: 52,
         liderNombre: "Valeria Cauich",
-        miembros: [101, 123, 57, 50, 147, 144, 89, 80, 150, 156, 88, 166, 171]
+        miembros: [101, 123, 57, 50, 147, 144, 89, 80, 150, 156, 88, 166, 171, 174]
     },
     "🔹 Equipo X": {
         liderId: null,
