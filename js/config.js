@@ -82,6 +82,7 @@ const TEAM_STRUCTURE = {
         liderId: 145,
         liderNombre: "Guadalupe Pech",
         miembros: [124, 132, 92, 36, 45, 59, 83, 113, 49, 109, 86, 118, 164, 173]
+        
     },
     "👑 Lider B": {
         liderId: 141,
