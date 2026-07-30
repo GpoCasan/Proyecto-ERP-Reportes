@@ -101,12 +101,12 @@ const TEAM_STRUCTURE = {
     "👑 Lider E": {
         liderId: 120,
         liderNombre: "Erika Pacheco",
-        miembros: [102, 117, 60, 46, 108, 95, 127, 122, 139, 33, 125, 73, 129, 162]
+        miembros: [102, 117, 60, 46, 108, 95, 127, 122, 139, 33, 125, 73, 129, 162, 175]
     },
     "👑 Lider F": {
         liderId: 52,
         liderNombre: "Valeria Cauich",
-        miembros: [101, 123, 57, 50, 147, 144, 89, 80, 150, 156, 88, 166, 171]
+        miembros: [101, 123, 57, 50, 147, 144, 89, 80, 150, 156, 88, 166, 171, 174]
     },
     "🔹 Equipo X": {
         liderId: null,
