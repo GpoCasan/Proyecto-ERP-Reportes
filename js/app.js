@@ -159,6 +159,9 @@ function initNavigation() {
             if (moduleName === 'tae_apps' && typeof initTaeAppsModule === 'function') {
                 setTimeout(initTaeAppsModule, 100);
             }
+            if (moduleName === 'boletos_erp' && typeof initBoletosERPModule === 'function') {
+                setTimeout(initBoletosERPModule, 100);
+            }            
         });
     });
 }

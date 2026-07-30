@@ -199,7 +199,15 @@
                 <div class="card-icon">💰</div>
                 <div class="card-title">Ingresos</div>
             </div>
+        
+            <!-- MÓDULO: BOLETOS RIFA (ERP) -->
+            <div class="nav-card" data-module="boletos_erp">
+                <div class="card-icon">🎫</div>
+                <div class="card-title">Boletos RIFA (ERP)</div>
+            </div>
+        
         </div>
+        
 
         <!-- MÓDULO 1: CONTADO -->
         <div id="contadoModule" class="module active-module">
@@ -972,6 +980,38 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- MÓDULO: BOLETOS RIFA (ERP) -->
+            <div id="boletos_erpModule" class="module">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🎫 Boletos RIFA - Ventas ERP</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="boletosErrorAlert" class="alert alert-error"></div>
+                        <div id="boletosInfoAlert" class="alert alert-info"></div>
+                        
+                        <div class="date-button-group">
+                            <div class="date-input">
+                                <label>📅 Fecha Inicio</label>
+                                <input type="date" id="boletosStartDate">
+                            </div>
+                            <div class="date-input">
+                                <label>📅 Fecha Fin</label>
+                                <input type="date" id="boletosEndDate">
+                            </div>
+                            <div class="query-button">
+                                <button id="consultarBoletosBtn" class="btn-tae">🎫 Consultar</button>
+                            </div>
+                        </div>
+                        <div style="font-size:0.75rem;color:#64748b;margin-top:-10px;margin-bottom:16px;">
+                            ⏱️ Rango: desde las 6:00 AM hasta las 6:00 AM del día siguiente
+                        </div>
+
+                        <div id="boletosResults" style="display:none;margin-top:20px;"></div>
+                    </div>
+                </div>
+            </div>
 
         <!-- FOOTER -->
         <footer class="footer">
@@ -1005,6 +1045,7 @@
     <script src="js/alertas_transferencias.js"></script>
     <script src="js/modules/tae_inventario.js"></script>
     <script src="js/modules/inventarioAccesorios.js"></script>
+    <script src="js/modules/boletos_erp.js"></script>
 
 </body>
 </html>
