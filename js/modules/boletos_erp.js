@@ -9,6 +9,8 @@ const PRECIO_BOLETO = 20;
 // Variable para controlar el ordenamiento
 let sortDirection = {};
 let currentResults = [];
+let currentPage = 1;
+let pageSize = 25;
 
 // ==================== FUNCIÓN PARA OBTENER RANGO DE FECHAS ====================
 
@@ -93,6 +95,17 @@ function abrirVerificacionEnNuevaPestana(telefono, boleto) {
     
     console.log(`🔗 [VERIFICAR] Abriendo: ${url}`);
     window.open(url, '_blank');
+}
+
+// ==================== ABRIR VENTA ERP ====================
+
+function abrirVentaERP(ventaId) {
+    console.log(`📄 [VENTA] Abriendo venta ID: ${ventaId}`);
+    if (typeof openReceipt === 'function') {
+        openReceipt(ventaId);
+    } else {
+        alert(`📄 Abrir venta #${ventaId}`);
+    }
 }
 
 // ==================== ABRIR MODAL CON OPCIÓN DE VERIFICACIÓN ====================
@@ -203,6 +216,373 @@ function abrirModalVerificacion(telefono, boleto, tipo, datoOriginal, esBoleto =
 
 function cerrarModalVerificacion() {
     const modal = document.getElementById('boletosVerificacionModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// ==================== BUSCADOR DE BOLETOS (MODAL SIMPLIFICADO) ====================
+
+function abrirBuscadorBoletos() {
+    const resultados = window._boletosERPData || currentResults;
+    
+    if (!resultados || resultados.length === 0) {
+        alert('⚠️ Primero debes consultar ventas de boletos');
+        return;
+    }
+    
+    const modal = document.getElementById('boletosBuscadorModal');
+    if (!modal) {
+        console.error('❌ Modal buscador no encontrado');
+        return;
+    }
+    
+    // Limpiar el contenido del modal
+    const body = document.getElementById('boletosBuscadorBody');
+    if (body) {
+        body.innerHTML = `
+            <div style="padding: 20px 0;">
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-weight: 600; color: #1e293b; margin-bottom: 8px; font-size: 0.9rem;">
+                        🎫 Número de boleto (3 dígitos):
+                    </label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" 
+                               id="boletosBuscadorInput" 
+                               placeholder="Ej: 005" 
+                               maxlength="3"
+                               style="
+                                   flex: 1;
+                                   padding: 10px 14px;
+                                   border: 2px solid #e2e8f0;
+                                   border-radius: 8px;
+                                   font-size: 1.1rem;
+                                   font-weight: 600;
+                                   text-align: center;
+                                   font-family: monospace;
+                                   outline: none;
+                                   transition: border-color 0.2s;
+                               "
+                               onfocus="this.style.borderColor='#3b82f6'"
+                               onblur="this.style.borderColor='#e2e8f0'"
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 3)">
+                        <button onclick="buscarBoletoModal()" style="
+                            background: linear-gradient(135deg, #1e40af, #3b82f6);
+                            color: white;
+                            border: none;
+                            padding: 10px 24px;
+                            border-radius: 8px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            white-space: nowrap;
+                        "
+                        onmouseover="this.style.transform='scale(1.02)'"
+                        onmouseout="this.style.transform='scale(1)'">
+                            🔍 Buscar
+                        </button>
+                    </div>
+                </div>
+                <div id="boletosResultadoBusqueda" style="margin-top: 16px;">
+                    <div style="text-align: center; color: #94a3b8; padding: 30px 0;">
+                        <div style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
+                        <p>Ingresa el número de boleto de 3 dígitos</p>
+                        <p style="font-size: 0.8rem; margin-top: 8px;">Ejemplo: 001, 005, 123</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Configurar Enter en el input
+    const input = document.getElementById('boletosBuscadorInput');
+    if (input) {
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                buscarBoletoModal();
+            }
+        });
+        // Enfocar automáticamente
+        setTimeout(() => input.focus(), 100);
+    }
+    
+    // Limpiar resultado de búsqueda anterior
+    const resultadoDiv = document.getElementById('boletosResultadoBusqueda');
+    if (resultadoDiv) {
+        resultadoDiv.innerHTML = `
+            <div style="text-align: center; color: #94a3b8; padding: 30px 0;">
+                <div style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
+                <p>Ingresa el número de boleto de 3 dígitos</p>
+                <p style="font-size: 0.8rem; margin-top: 8px;">Ejemplo: 001, 005, 123</p>
+            </div>
+        `;
+    }
+    
+    // Mostrar el modal
+    modal.style.display = 'flex';
+    document.getElementById('boletosBuscadorTitle').textContent = '🎫 Buscar Boleto';
+}
+
+function buscarBoletoModal() {
+    const input = document.getElementById('boletosBuscadorInput');
+    if (!input) return;
+    
+    const query = input.value.trim();
+    
+    // Validar que sean exactamente 3 dígitos
+    if (!query || query.length !== 3 || !/^\d{3}$/.test(query)) {
+        alert('⚠️ Debes ingresar exactamente 3 dígitos (001 al 999)');
+        input.focus();
+        input.select();
+        return;
+    }
+    
+    console.log(`🔍 [BUSCADOR] Buscando boleto: ${query}`);
+    
+    const resultados = window._boletosERPData || currentResults;
+    
+    if (!resultados || resultados.length === 0) {
+        mostrarResultadoBusquedaModal(null, query, 'No hay ventas cargadas. Primero consulta ventas de boletos.');
+        return;
+    }
+    
+    // Buscar coincidencia EXACTA
+    let ventasEncontradas = [];
+    
+    resultados.forEach(item => {
+        if (item.boletos && item.boletos.length > 0) {
+            // Buscar coincidencia exacta en el array de boletos
+            const encontrado = item.boletos.some(b => b === query);
+            if (encontrado) {
+                ventasEncontradas.push(item);
+            }
+        }
+        
+        // También buscar en dato2 (string de boletos) con coincidencia exacta
+        if (item.dato2) {
+            // Buscar el boleto como palabra completa (con bordes de palabra)
+            const regex = new RegExp(`\\b${query}\\b`);
+            if (regex.test(item.dato2)) {
+                if (!ventasEncontradas.includes(item)) {
+                    ventasEncontradas.push(item);
+                }
+            }
+        }
+    });
+    
+    if (ventasEncontradas.length === 0) {
+        mostrarResultadoBusquedaModal(null, query, `❌ Boleto #${query} no encontrado en el rango consultado.`);
+        return;
+    }
+    
+    if (ventasEncontradas.length === 1) {
+        mostrarResultadoBusquedaModal(ventasEncontradas[0], query);
+    } else {
+        mostrarResultadoBusquedaModal(ventasEncontradas, query);
+    }
+}
+
+function mostrarResultadoBusquedaModal(data, query, mensajeError = null) {
+    const resultadoDiv = document.getElementById('boletosResultadoBusqueda');
+    if (!resultadoDiv) return;
+    
+    // Si hay error o no hay datos
+    if (mensajeError || !data) {
+        resultadoDiv.innerHTML = `
+            <div style="text-align: center; padding: 20px; background: #fef2f2; border-radius: 10px; border: 1px solid #fecaca;">
+                <div style="font-size: 2.5rem; margin-bottom: 12px;">❌</div>
+                <p style="color: #dc2626; font-weight: 600;">${mensajeError || 'No se encontró el boleto'}</p>
+                <button onclick="limpiarBuscadorBoletos()" style="
+                    margin-top: 12px;
+                    background: #64748b;
+                    color: white;
+                    border: none;
+                    padding: 8px 20px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 500;
+                ">
+                    🔄 Limpiar
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    // Si es un array (múltiples ventas)
+    if (Array.isArray(data)) {
+        let ventasHtml = '';
+        data.forEach((item, index) => {
+            const bgColor = index % 2 === 0 ? '#f8fafc' : 'white';
+            const tipoIcon = item.tipo === 'pagado' ? '💰' : '🎁';
+            const fechaStr = new Date(item.fecha).toLocaleString();
+            
+            ventasHtml += `
+                <div style="
+                    display: grid;
+                    grid-template-columns: auto 1fr auto;
+                    gap: 10px;
+                    padding: 10px 12px;
+                    background: ${bgColor};
+                    border-bottom: 1px solid #e2e8f0;
+                    align-items: center;
+                    cursor: pointer;
+                "
+                onclick="mostrarResultadoBusquedaModal(ventasEncontradas[${index}], '${query}')"
+                onmouseover="this.style.background='#e2e8f0'"
+                onmouseout="this.style.background='${bgColor}'">
+                    <div style="font-size: 1.2rem;">${tipoIcon}</div>
+                    <div>
+                        <div style="font-weight: 600; color: #1e40af; cursor: pointer;" onclick="event.stopPropagation(); abrirVentaERP(${item.ventaId});">
+                            📄 #${item.folio}
+                        </div>
+                        <div style="font-size: 0.7rem; color: #64748b;">${item.sucursal} - ${item.vendedor}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight: bold; color: #059669;">$${item.total.toFixed(2)}</div>
+                        <div style="font-size: 0.65rem; color: #64748b;">${item.cantidadBoletos} boletos</div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        resultadoDiv.innerHTML = `
+            <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                <div style="padding: 8px 12px; background: #f1f5f9; font-weight: 600; color: #1e293b; border-bottom: 1px solid #e2e8f0;">
+                    🎫 Boleto #${query} - ${data.length} ventas encontradas
+                </div>
+                ${ventasHtml}
+            </div>
+            <div style="margin-top: 12px; display: flex; gap: 10px;">
+                <button onclick="limpiarBuscadorBoletos()" style="
+                    flex: 1;
+                    background: #64748b;
+                    color: white;
+                    border: none;
+                    padding: 10px;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                "
+                onmouseover="this.style.transform='scale(1.02)'"
+                onmouseout="this.style.transform='scale(1)'">
+                    🔄 Limpiar
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    // Si es una sola venta (objeto)
+    const item = data;
+    const boletosStr = item.boletos && item.boletos.length > 0 ? item.boletos.join(', ') : 'N/A';
+    const telefonoStr = item.telefono || 'N/A';
+    const tipoStr = item.tipo === 'pagado' ? '💰 Pagado' : '🎁 Promoción';
+    const fechaStr = new Date(item.fecha).toLocaleString();
+    const esValidoStr = item.esValido ? '✅ Válido' : '⚠️ Inconsistencia';
+    
+    // Generar HTML para los boletos clickeables
+    let boletosClickeablesHtml = '';
+    if (item.boletos && item.boletos.length > 0) {
+        boletosClickeablesHtml = item.boletos.map(b => 
+            `<a href="#" onclick="abrirVerificacionEnNuevaPestana(null, '${b}');return false;" style="color:#059669;text-decoration:underline;cursor:pointer;font-weight:bold;margin:0 2px;">${b}</a>`
+        ).join(', ');
+    } else {
+        boletosClickeablesHtml = 'N/A';
+    }
+    
+    // Teléfono clickeable
+    const telefonoClickeable = telefonoStr !== 'N/A' 
+        ? `<a href="#" onclick="abrirVerificacionEnNuevaPestana('${telefonoStr}', null);return false;" style="color:#2563eb;text-decoration:underline;cursor:pointer;font-weight:bold;">${telefonoStr}</a>`
+        : 'N/A';
+    
+    // Folio clickeable
+    const folioClickeable = `<a href="#" onclick="abrirVentaERP(${item.ventaId});return false;" style="color:#1e40af;text-decoration:underline;cursor:pointer;font-weight:bold;">#${item.folio}</a>`;
+    
+    resultadoDiv.innerHTML = `
+        <div style="background: #f0fdf4; border: 2px solid #059669; border-radius: 10px; padding: 16px; margin-top: 8px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                <div style="background: white; padding: 10px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: #64748b;">📄 Folio</div>
+                    <div style="font-size: 1.1rem;">${folioClickeable}</div>
+                </div>
+                <div style="background: white; padding: 10px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: #64748b;">🎫 Tipo</div>
+                    <div style="font-size: 1.1rem; font-weight: bold;">${tipoStr}</div>
+                </div>
+                <div style="background: white; padding: 10px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: #64748b;">📱 Teléfono</div>
+                    <div style="font-size: 1rem;">${telefonoClickeable}</div>
+                </div>
+                <div style="background: white; padding: 10px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: #64748b;">🎫 Boleto(s)</div>
+                    <div style="font-size: 1rem; font-weight: bold; color: #059669;">${boletosClickeablesHtml}</div>
+                </div>
+                <div style="background: white; padding: 10px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: #64748b;">💰 Total</div>
+                    <div style="font-size: 1.1rem; font-weight: bold; color: #059669;">$${item.total.toFixed(2)}</div>
+                </div>
+                <div style="background: white; padding: 10px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: #64748b;">🏪 Sucursal</div>
+                    <div style="font-size: 0.85rem; font-weight: 500;">${item.sucursal}</div>
+                </div>
+                <div style="background: white; padding: 10px; border-radius: 8px; text-align: center; grid-column: span 2;">
+                    <div style="font-size: 0.7rem; color: #64748b;">👤 Vendedor</div>
+                    <div style="font-size: 0.85rem; font-weight: 500;">${item.vendedor}</div>
+                </div>
+                <div style="background: ${item.esValido ? '#f0fdf4' : '#fef2f2'}; padding: 8px; border-radius: 6px; grid-column: span 2; text-align: center; border: 1px solid ${item.esValido ? '#bbf7d0' : '#fecaca'};">
+                    <div style="font-size: 0.85rem; font-weight: bold; color: ${item.esValido ? '#059669' : '#dc2626'};">${esValidoStr}</div>
+                </div>
+                <div style="grid-column: span 2; font-size: 0.7rem; color: #94a3b8; text-align: center;">
+                    📅 ${fechaStr}
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button onclick="limpiarBuscadorBoletos()" style="
+                    flex: 1;
+                    background: #64748b;
+                    color: white;
+                    border: none;
+                    padding: 10px;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                "
+                onmouseover="this.style.transform='scale(1.02)'"
+                onmouseout="this.style.transform='scale(1)'">
+                    🔄 Limpiar
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function limpiarBuscadorBoletos() {
+    const input = document.getElementById('boletosBuscadorInput');
+    const resultadoDiv = document.getElementById('boletosResultadoBusqueda');
+    
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    
+    if (resultadoDiv) {
+        resultadoDiv.innerHTML = `
+            <div style="text-align: center; color: #94a3b8; padding: 30px 0;">
+                <div style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
+                <p>Ingresa el número de boleto de 3 dígitos</p>
+                <p style="font-size: 0.8rem; margin-top: 8px;">Ejemplo: 001, 005, 123</p>
+            </div>
+        `;
+    }
+}
+
+function cerrarBuscadorBoletos() {
+    const modal = document.getElementById('boletosBuscadorModal');
     if (modal) {
         modal.style.display = 'none';
     }
@@ -364,6 +744,7 @@ async function consultarBoletosERP() {
         currentResults = resultados;
         window._boletosERPData = resultados;
         sortDirection = {};
+        currentPage = 1;
 
         mostrarResultadosBoletosERP(resultados);
 
@@ -374,7 +755,6 @@ async function consultarBoletosERP() {
             const totalPagados = resultados.filter(r => r.tipo === 'pagado').length;
             const totalPromocion = resultados.filter(r => r.tipo === 'promocion').length;
             const totalBoletos = resultados.reduce((sum, r) => sum + r.cantidadBoletos, 0);
-            // SOLO boletos pagados (NO promoción)
             const totalPagado = resultados
                 .filter(r => r.tipo === 'pagado')
                 .reduce((sum, r) => sum + r.total, 0);
@@ -395,6 +775,24 @@ async function consultarBoletosERP() {
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
+}
+
+// ==================== FUNCIONES DE PAGINACIÓN ====================
+
+function cambiarPaginaBoletos(direccion) {
+    const totalPaginas = Math.ceil(currentResults.length / pageSize);
+    if (direccion === 'anterior' && currentPage > 1) {
+        currentPage--;
+    } else if (direccion === 'siguiente' && currentPage < totalPaginas) {
+        currentPage++;
+    }
+    mostrarResultadosBoletosERP(currentResults);
+}
+
+function cambiarTamanoPaginaBoletos(nuevoTamano) {
+    pageSize = nuevoTamano;
+    currentPage = 1;
+    mostrarResultadosBoletosERP(currentResults);
 }
 
 // ==================== ORDENAR TABLA ====================
@@ -437,6 +835,8 @@ function ordenarBoletos(columna) {
     });
 
     window._boletosERPData = sorted;
+    currentResults = sorted;
+    currentPage = 1;
     mostrarResultadosBoletosERP(sorted);
 }
 
@@ -455,10 +855,25 @@ function mostrarResultadosBoletosERP(resultados) {
         return;
     }
 
+    // Calcular paginación
+    const totalRegistros = resultados.length;
+    const totalPaginas = Math.ceil(totalRegistros / pageSize);
+    
+    // Asegurar que currentPage no exceda el total
+    if (currentPage > totalPaginas) {
+        currentPage = totalPaginas;
+    }
+    if (currentPage < 1) {
+        currentPage = 1;
+    }
+    
+    const inicio = (currentPage - 1) * pageSize;
+    const fin = Math.min(inicio + pageSize, totalRegistros);
+    const paginaActual = resultados.slice(inicio, fin);
+
     const totalPagados = resultados.filter(r => r.tipo === 'pagado').length;
     const totalPromocion = resultados.filter(r => r.tipo === 'promocion').length;
     const totalBoletos = resultados.reduce((sum, r) => sum + r.cantidadBoletos, 0);
-    // SOLO boletos pagados (NO promoción)
     const totalPagado = resultados
         .filter(r => r.tipo === 'pagado')
         .reduce((sum, r) => sum + r.total, 0);
@@ -498,7 +913,7 @@ function mostrarResultadosBoletosERP(resultados) {
 
         <div style="display:flex;justify-content:space-between;margin-bottom:16px;gap:10px;flex-wrap:wrap;">
             <div style="font-size:0.75rem;color:#64748b;">
-                💡 Haz clic en los números para verificar (teléfono o boleto)
+                💡 Haz clic en los números para verificar (teléfono o boleto) | 📄 Folio abre la venta
                 ${invalidos > 0 ? ' | ⚠️ Las filas con fondo rojo tienen inconsistencia en el total' : ''}
             </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -515,6 +930,13 @@ function mostrarResultadosBoletosERP(resultados) {
                     font-weight:600;cursor:pointer;
                 ">
                     👥 Resumen por Ruta
+                </button>
+                <button onclick="abrirBuscadorBoletos()" style="
+                    background:linear-gradient(135deg,#f59e0b,#f97316);
+                    color:white;border:none;padding:8px 20px;border-radius:8px;
+                    font-weight:600;cursor:pointer;
+                ">
+                    🔍 Buscar Boleto
                 </button>
             </div>
         </div>
@@ -537,7 +959,7 @@ function mostrarResultadosBoletosERP(resultados) {
                 <tbody>
     `;
 
-    resultados.forEach((item, index) => {
+    paginaActual.forEach((item, index) => {
         const bgColor = item.esValido ? (index % 2 === 0 ? '#f8fafc' : 'white') : '#fef2f2';
         const tipoIcon = item.tipo === 'pagado' ? '💰' : '🎁';
         
@@ -557,31 +979,34 @@ function mostrarResultadosBoletosERP(resultados) {
         const mostrarDato1 = item.dato1 && item.dato1 !== 'N/A' ? formatearDato(item.dato1) : '—';
         const mostrarDato2 = item.dato2 && item.dato2 !== 'N/A' ? formatearDato(item.dato2) : '—';
         
+        // Folio clickeable - abre la venta
+        const folioHtml = `<a href="#" onclick="abrirVentaERP(${item.ventaId});return false;" style="color:#1e40af;text-decoration:underline;cursor:pointer;font-weight:600;">📄 #${item.folio}${!item.esValido ? ' ⚠️' : ''}</a>`;
+        
+        // Teléfono clickeable - abre verificador por teléfono
         const esClickeable1 = telefono !== null && telefono !== undefined;
         const dato1Html = esClickeable1
-            ? `<a href="#" onclick="abrirModalVerificacion('${telefono}', null, '${item.tipo}', '${item._dato1Original || item.dato1}', false);return false;" style="color:#2563eb;text-decoration:underline;cursor:pointer;">${mostrarDato1}</a>`
+            ? `<a href="#" onclick="abrirVerificacionEnNuevaPestana('${telefono}', null);return false;" style="color:#2563eb;text-decoration:underline;cursor:pointer;font-weight:500;">${mostrarDato1}</a>`
             : mostrarDato1;
         
-        let dato2Html = mostrarDato2;
+        // Boletos clickeables - cada uno abre el verificador
+        let dato2Html = '';
         if (boletos.length > 0) {
             if (boletos.length === 1) {
-                dato2Html = `<a href="#" onclick="abrirModalVerificacion('${telefono || ''}', '${boletos[0]}', '${item.tipo}', '${item._dato2Original || item.dato2}', true);return false;" style="color:#059669;text-decoration:underline;cursor:pointer;">${mostrarDato2}</a>`;
+                dato2Html = `<a href="#" onclick="abrirVerificacionEnNuevaPestana(null, '${boletos[0]}');return false;" style="color:#059669;text-decoration:underline;cursor:pointer;font-weight:500;">${mostrarDato2}</a>`;
             } else {
                 const boletosHtml = boletos.map(b => 
-                    `<a href="#" onclick="abrirModalVerificacion('${telefono || ''}', '${b}', '${item.tipo}', '${item._dato2Original || item.dato2}', true);return false;" style="color:#059669;text-decoration:underline;cursor:pointer;display:inline-block;margin:1px 3px;">${b}</a>`
+                    `<a href="#" onclick="abrirVerificacionEnNuevaPestana(null, '${b}');return false;" style="color:#059669;text-decoration:underline;cursor:pointer;font-weight:500;display:inline-block;margin:1px 3px;">${b}</a>`
                 ).join(' ');
                 dato2Html = boletosHtml;
             }
+        } else {
+            dato2Html = mostrarDato2;
         }
-        
-        const warningIcon = !item.esValido ? ' ⚠️' : '';
         
         html += `
             <tr style="border-bottom:1px solid #e2e8f0;background:${bgColor};">
-                <td style="padding:8px 8px;font-weight:600;color:#1e40af;text-align:center;">
-                    <a href="#" onclick="openReceipt(${item.ventaId});return false;" style="color:#1e40af;text-decoration:none;">
-                        📄 #${item.folio}${warningIcon}
-                    </a>
+                <td style="padding:8px 8px;text-align:center;">
+                    ${folioHtml}
                     ${!item.esValido ? `<div style="font-size:0.55rem;color:#dc2626;cursor:help;" title="${item.mensajeValidacion}">⚠️ ${item.mensajeValidacion}</div>` : ''}
                 </td>
                 <td style="padding:8px 8px;text-align:center;font-size:1.3rem;">
@@ -614,8 +1039,76 @@ function mostrarResultadosBoletosERP(resultados) {
         </div>
     `;
 
+    // ==================== PAGINACIÓN ====================
+    html += `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px 0;gap:12px;flex-wrap:wrap;border-top:1px solid #e2e8f0;margin-top:12px;">
+            <div style="display:flex;align-items:center;gap:8px;font-size:0.8rem;color:#64748b;">
+                <span>Mostrando <strong>${inicio + 1}</strong> - <strong>${fin}</strong> de <strong>${totalRegistros}</strong> registros</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:0.75rem;color:#64748b;">Mostrar:</span>
+                <select onchange="cambiarTamanoPaginaBoletos(parseInt(this.value))" style="
+                    padding:4px 8px;
+                    border:1px solid #e2e8f0;
+                    border-radius:6px;
+                    font-size:0.75rem;
+                    background:white;
+                    cursor:pointer;
+                    outline:none;
+                ">
+                    <option value="25" ${pageSize === 25 ? 'selected' : ''}>25</option>
+                    <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
+                    <option value="100" ${pageSize === 100 ? 'selected' : ''}>100</option>
+                    <option value="${totalRegistros}" ${pageSize === totalRegistros ? 'selected' : ''}>Todos</option>
+                </select>
+                <div style="display:flex;gap:4px;">
+                    <button onclick="cambiarPaginaBoletos('anterior')" ${currentPage <= 1 ? 'disabled' : ''} style="
+                        padding:6px 12px;
+                        border:1px solid #e2e8f0;
+                        border-radius:6px;
+                        background:${currentPage <= 1 ? '#f1f5f9' : 'white'};
+                        color:${currentPage <= 1 ? '#94a3b8' : '#1e293b'};
+                        cursor:${currentPage <= 1 ? 'not-allowed' : 'pointer'};
+                        font-size:0.75rem;
+                        transition:all 0.2s;
+                    "
+                    onmouseover="if(!this.disabled){this.style.background='#f1f5f9'}"
+                    onmouseout="if(!this.disabled){this.style.background='white'}">
+                        ◀ Anterior
+                    </button>
+                    <span style="padding:6px 12px;font-size:0.8rem;font-weight:600;color:#1e40af;">
+                        Página ${currentPage} de ${totalPaginas}
+                    </span>
+                    <button onclick="cambiarPaginaBoletos('siguiente')" ${currentPage >= totalPaginas ? 'disabled' : ''} style="
+                        padding:6px 12px;
+                        border:1px solid #e2e8f0;
+                        border-radius:6px;
+                        background:${currentPage >= totalPaginas ? '#f1f5f9' : 'white'};
+                        color:${currentPage >= totalPaginas ? '#94a3b8' : '#1e293b'};
+                        cursor:${currentPage >= totalPaginas ? 'not-allowed' : 'pointer'};
+                        font-size:0.75rem;
+                        transition:all 0.2s;
+                    "
+                    onmouseover="if(!this.disabled){this.style.background='#f1f5f9'}"
+                    onmouseout="if(!this.disabled){this.style.background='white'}">
+                        Siguiente ▶
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
     container.innerHTML = html;
     container.style.display = 'block';
+}
+
+// ==================== FUNCIÓN PARA ESCAPAR HTML ====================
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // ==================== MODAL RESUMEN POR RUTA (TABLA PLANA) ====================
@@ -703,6 +1196,9 @@ function openResumenBoletosModal() {
         asesorData.registros.push(item);
         ruta.totalRegistros++;
     });
+
+    // Guardar datos globalmente para exportación
+    window._boletosResumenData = rutasMap;
 
     // ========== 2. CREAR MODAL ==========
     let modal = document.getElementById('boletosResumenModal');
@@ -882,7 +1378,16 @@ function openResumenBoletosModal() {
                 </div>
                 ${contentHtml}
             </div>
-            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+            <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 10px;">
+                <button onclick="exportResumenBoletosToExcel()" style="
+                    background: linear-gradient(135deg, #059669, #10b981);
+                    color: white;
+                    border: none;
+                    padding: 8px 20px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                ">📊 Exportar Resumen a Excel</button>
                 <button onclick="cerrarBoletosResumenModal()" style="
                     background: #64748b;
                     color: white;
@@ -931,6 +1436,126 @@ function openResumenBoletosModal() {
             cerrarBoletosResumenModal();
         }
     });
+}
+
+// ==================== EXPORTAR RESUMEN POR RUTA A EXCEL ====================
+
+function exportResumenBoletosToExcel() {
+    const rutasMap = window._boletosResumenData;
+    if (!rutasMap || rutasMap.size === 0) {
+        alert('⚠️ No hay datos para exportar.');
+        return;
+    }
+
+    // Construir filas para Excel
+    const rows = [
+        ['RESUMEN DE BOLETOS POR RUTA'],
+        [`Fecha de consulta: ${new Date().toLocaleString()}`],
+        [],
+        ['RUTA', 'TIENDA', 'ASESOR', 'PROMOCION', 'PAGADOS', 'TOTAL DE BOLETOS', 'TOTAL COBRADO']
+    ];
+
+    let totalGeneralPromo = 0;
+    let totalGeneralPagados = 0;
+    let totalGeneralBoletos = 0;
+    let totalGeneralCobrado = 0;
+
+    // Ordenar rutas (Ruta 1, Ruta 2, Ruta 3, Ruta 4, Sin Ruta)
+    const orden = ['Ruta 1', 'Ruta 2', 'Ruta 3', 'Ruta 4', 'Sin Ruta'];
+    const rutasOrdenadas = Array.from(rutasMap.values())
+        .sort((a, b) => orden.indexOf(a.nombre) - orden.indexOf(b.nombre));
+
+    rutasOrdenadas.forEach(ruta => {
+        const asesoresArray = Array.from(ruta.asesores.values())
+            .sort((a, b) => b.totalBoletos - a.totalBoletos);
+
+        let subtotalPromo = 0;
+        let subtotalPagados = 0;
+        let subtotalBoletos = 0;
+        let subtotalCobrado = 0;
+
+        asesoresArray.forEach(item => {
+            const promo = item.boletosPromo || 0;
+            const pagados = item.boletosPagados || 0;
+            const totalBoletos = item.totalBoletos || 0;
+            const totalCobrado = item.totalPagadoPagados || 0; // solo pagados
+
+            rows.push([
+                ruta.nombre,
+                item.tienda,
+                item.asesor,
+                promo,
+                pagados,
+                totalBoletos,
+                totalCobrado.toFixed(2)
+            ]);
+
+            subtotalPromo += promo;
+            subtotalPagados += pagados;
+            subtotalBoletos += totalBoletos;
+            subtotalCobrado += totalCobrado;
+        });
+
+        // Subtotales por ruta
+        rows.push([
+            `SUBTOTAL ${ruta.nombre}`,
+            '',
+            '',
+            subtotalPromo,
+            subtotalPagados,
+            subtotalBoletos,
+            subtotalCobrado.toFixed(2)
+        ]);
+        rows.push([]); // línea en blanco
+
+        totalGeneralPromo += subtotalPromo;
+        totalGeneralPagados += subtotalPagados;
+        totalGeneralBoletos += subtotalBoletos;
+        totalGeneralCobrado += subtotalCobrado;
+    });
+
+    // Total general
+    rows.push(['TOTAL GENERAL', '', '', totalGeneralPromo, totalGeneralPagados, totalGeneralBoletos, totalGeneralCobrado.toFixed(2)]);
+
+    // Generar archivo
+    try {
+        if (typeof XLSX !== 'undefined') {
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            ws['!cols'] = [
+                { wch: 18 }, // RUTA
+                { wch: 20 }, // TIENDA
+                { wch: 22 }, // ASESOR
+                { wch: 12 }, // PROMOCION
+                { wch: 12 }, // PAGADOS
+                { wch: 16 }, // TOTAL BOLETOS
+                { wch: 16 }  // TOTAL COBRADO
+            ];
+            XLSX.utils.book_append_sheet(wb, ws, 'Resumen');
+            const fileName = `resumen_boletos_ruta_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            alert(`✅ Exportado correctamente: ${fileName}`);
+        } else {
+            // Fallback a CSV
+            let csv = '\uFEFF';
+            rows.forEach(row => {
+                csv += row.join(',') + '\n';
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `resumen_boletos_ruta_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            alert('✅ Exportado correctamente en formato CSV');
+        }
+    } catch (error) {
+        console.error('❌ Error exportando resumen:', error);
+        alert('❌ Error al exportar: ' + error.message);
+    }
 }
 
 // ==================== CERRAR MODAL RESUMEN ====================
@@ -1053,6 +1678,7 @@ function exportBoletosERPToExcel() {
 function initBoletosERPModule() {
     console.log('🔄 [BOLETOS ERP] Inicializando módulo...');
 
+    // Crear modal de verificación si no existe
     if (!document.getElementById('boletosVerificacionModal')) {
         const modalHTML = `
             <div id="boletosVerificacionModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10001;justify-content:center;align-items:center;overflow-y:auto;padding:20px;">
@@ -1076,6 +1702,28 @@ function initBoletosERPModule() {
         document.body.insertAdjacentHTML('beforeend', modalHTML);
     }
 
+    // Crear modal de buscador de boletos si no existe
+    if (!document.getElementById('boletosBuscadorModal')) {
+        const buscadorModalHTML = `
+            <div id="boletosBuscadorModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;justify-content:center;align-items:center;overflow-y:auto;padding:20px;">
+                <div style="background:white;border-radius:16px;max-width:550px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);animation:modalFadeIn 0.3s ease;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #e2e8f0;flex-shrink:0;">
+                        <h3 id="boletosBuscadorTitle" style="margin:0;font-size:1.1rem;color:#1e40af;">🎫 Buscar Boleto</h3>
+                        <button onclick="cerrarBuscadorBoletos()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#64748b;padding:0 8px;">&times;</button>
+                    </div>
+                    <div id="boletosBuscadorBody" style="padding:16px 20px;overflow-y:auto;flex:1;">
+                        <div style="text-align:center;padding:40px;color:#64748b;">
+                            <div style="font-size:3rem;margin-bottom:16px;">🔍</div>
+                            <p>Cargando buscador...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', buscadorModalHTML);
+    }
+
+    // Configurar fechas
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -1094,8 +1742,12 @@ function initBoletosERPModule() {
 
     currentResults = [];
     window._boletosERPData = null;
+    window._boletosResumenData = null;
     sortDirection = {};
+    currentPage = 1;
+    pageSize = 25;
 
+    // Configurar botón de consulta
     const btn = document.getElementById('consultarBoletosBtn');
     if (btn) {
         const newBtn = btn.cloneNode(true);
@@ -1104,10 +1756,15 @@ function initBoletosERPModule() {
         console.log('✅ [BOLETOS ERP] Botón configurado');
     }
 
+    // Cerrar modales al hacer clic fuera
     document.addEventListener('click', function(e) {
-        const modal = document.getElementById('boletosVerificacionModal');
-        if (modal && e.target === modal) {
+        const modalVerificacion = document.getElementById('boletosVerificacionModal');
+        if (modalVerificacion && e.target === modalVerificacion) {
             cerrarModalVerificacion();
+        }
+        const modalBuscador = document.getElementById('boletosBuscadorModal');
+        if (modalBuscador && e.target === modalBuscador) {
+            cerrarBuscadorBoletos();
         }
     });
 
@@ -1118,10 +1775,19 @@ function initBoletosERPModule() {
 window.initBoletosERPModule = initBoletosERPModule;
 window.consultarBoletosERP = consultarBoletosERP;
 window.exportBoletosERPToExcel = exportBoletosERPToExcel;
+window.exportResumenBoletosToExcel = exportResumenBoletosToExcel;
 window.ordenarBoletos = ordenarBoletos;
+window.cambiarPaginaBoletos = cambiarPaginaBoletos;
+window.cambiarTamanoPaginaBoletos = cambiarTamanoPaginaBoletos;
+window.abrirBuscadorBoletos = abrirBuscadorBoletos;
+window.buscarBoletoModal = buscarBoletoModal;
+window.limpiarBuscadorBoletos = limpiarBuscadorBoletos;
+window.cerrarBuscadorBoletos = cerrarBuscadorBoletos;
+window.mostrarResultadoBusquedaModal = mostrarResultadoBusquedaModal;
 window.abrirModalVerificacion = abrirModalVerificacion;
 window.abrirVerificacionEnNuevaPestana = abrirVerificacionEnNuevaPestana;
 window.cerrarModalVerificacion = cerrarModalVerificacion;
+window.abrirVentaERP = abrirVentaERP;
 window.openResumenBoletosModal = openResumenBoletosModal;
 window.cerrarBoletosResumenModal = cerrarBoletosResumenModal;
 window.extraerTelefono = extraerTelefono;
