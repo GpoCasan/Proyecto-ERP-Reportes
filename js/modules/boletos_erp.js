@@ -588,6 +588,55 @@ function cerrarBuscadorBoletos() {
     }
 }
 
+// ==================== FUNCIÓN PARA OBTENER TODAS LAS VENTAS (PAGINACIÓN COMPLETA) ====================
+
+async function obtenerTodasLasVentas(startFormatted, endFormatted) {
+    let todasLasVentas = [];
+    let pagina = 1;
+    const porPagina = 100;
+    let total = 0;
+    
+    console.log(`📡 [BOLETOS ERP] Obteniendo todas las ventas...`);
+    
+    do {
+        let url = `${CONFIG.API_SALES_ENDPOINT}?page=${pagina}&per_page=${porPagina}&total=0`;
+        url += `&start_date=${startFormatted}`;
+        url += `&end_date=${endFormatted}`;
+        url += `&product_ids[]=${BOLETOS_PRODUCT_NOTA}`;
+        url += `&product_ids[]=${BOLETOS_PRODUCT_REFERENCIA}`;
+        url += `&service_ids[]=${BOLETOS_PRODUCT_REFERENCIA}`;
+        
+        console.log(`📡 [BOLETOS ERP] Página ${pagina}: ${url}`);
+        
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        const ventas = data.data || [];
+        total = data.total || 0;
+        
+        console.log(`✅ [BOLETOS ERP] Página ${pagina}: ${ventas.length} ventas encontradas (Total: ${total})`);
+        
+        todasLasVentas = todasLasVentas.concat(ventas);
+        pagina++;
+        
+        // Si no hay más ventas, salir
+        if (ventas.length === 0) break;
+        
+        // Si ya tenemos todas las ventas, salir
+        if (todasLasVentas.length >= total) break;
+        
+    } while (true);
+    
+    console.log(`✅ [BOLETOS ERP] Total de ventas obtenidas: ${todasLasVentas.length}`);
+    return todasLasVentas;
+}
+
 // ==================== FUNCIÓN PRINCIPAL (CONSULTAR VENTAS) ====================
 
 async function consultarBoletosERP() {
@@ -618,27 +667,10 @@ async function consultarBoletosERP() {
         const startFormatted = range.start;
         const endFormatted = range.end;
 
-        let url = `${CONFIG.API_SALES_ENDPOINT}?page=1&per_page=100&total=0`;
-        url += `&start_date=${startFormatted}`;
-        url += `&end_date=${endFormatted}`;
-        url += `&product_ids[]=${BOLETOS_PRODUCT_NOTA}`;
-        url += `&product_ids[]=${BOLETOS_PRODUCT_REFERENCIA}`;
-        url += `&service_ids[]=${BOLETOS_PRODUCT_REFERENCIA}`;
+        // Obtener todas las ventas con paginación completa
+        const ventas = await obtenerTodasLasVentas(startFormatted, endFormatted);
 
-        console.log('📡 [BOLETOS ERP] URL:', url);
-
-        const response = await fetch(url, {
-            headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const ventas = data.data || [];
-
-        console.log(`✅ [BOLETOS ERP] ${ventas.length} ventas encontradas`);
+        console.log(`✅ [BOLETOS ERP] ${ventas.length} ventas encontradas en total`);
 
         const resultados = [];
 
