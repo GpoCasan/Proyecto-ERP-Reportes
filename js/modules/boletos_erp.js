@@ -910,35 +910,49 @@ function mostrarResultadosBoletosERP(resultados) {
         .filter(r => r.tipo === 'pagado')
         .reduce((sum, r) => sum + r.total, 0);
     const invalidos = resultados.filter(r => !r.esValido).length;
+    const boletosPagados = resultados
+        .filter(r => r.tipo === 'pagado')
+        .reduce((sum, r) => sum + r.cantidadBoletos, 0);
+    const boletosPromocion = resultados
+        .filter(r => r.tipo === 'promocion')
+        .reduce((sum, r) => sum + r.cantidadBoletos, 0);
 
     let html = `
-        <div class="stats" style="margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
-            <div class="stat-card" style="background:linear-gradient(135deg,#1e40af,#3b82f6);">
-                <div class="stat-number">${resultados.length}</div>
-                <div class="stat-label">📊 Total ventas</div>
+        <div class="stats" style="margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+            <!-- Tarjeta: Total Boletos (MÁS VISIBLE) -->
+            <div class="stat-card" style="background:linear-gradient(135deg,#1e40af,#3b82f6);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(30,64,175,0.35);">
+                <div class="stat-number" style="font-size:2.4rem;font-weight:800;line-height:1.2;">${totalBoletos}</div>
+                <div class="stat-label" style="font-size:0.8rem;opacity:0.9;margin-top:2px;font-weight:600;">🎫 Total Boletos</div>
+                <div style="font-size:0.65rem;opacity:0.7;margin-top:3px;">📊 ${resultados.length} ventas</div>
             </div>
-            <div class="stat-card" style="background:linear-gradient(135deg,#059669,#10b981);">
-                <div class="stat-number">${totalPagados}</div>
-                <div class="stat-label">💰 Pagados</div>
-                <div style="font-size:0.65rem;opacity:0.8;">${totalBoletos - totalPromocion} boletos</div>
+            
+            <!-- Tarjeta: Boletos Pagados -->
+            <div class="stat-card" style="background:linear-gradient(135deg,#059669,#10b981);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(5,150,105,0.3);">
+                <div class="stat-number" style="font-size:1.8rem;font-weight:700;line-height:1.2;">${boletosPagados}</div>
+                <div class="stat-label" style="font-size:0.8rem;opacity:0.9;margin-top:2px;font-weight:600;">💰 Pagados</div>
+                <div style="font-size:0.65rem;opacity:0.7;margin-top:3px;">📊 ${totalPagados} ventas</div>
             </div>
-            <div class="stat-card" style="background:linear-gradient(135deg,#f97316,#ea580c);">
-                <div class="stat-number">${totalPromocion}</div>
-                <div class="stat-label">🎁 Promoción</div>
-                <div style="font-size:0.65rem;opacity:0.8;">${totalPromocion} boletos</div>
+            
+            <!-- Tarjeta: Boletos Promoción -->
+            <div class="stat-card" style="background:linear-gradient(135deg,#f97316,#ea580c);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(249,115,22,0.3);">
+                <div class="stat-number" style="font-size:1.8rem;font-weight:700;line-height:1.2;">${boletosPromocion}</div>
+                <div class="stat-label" style="font-size:0.8rem;opacity:0.9;margin-top:2px;font-weight:600;">🎁 Promoción</div>
+                <div style="font-size:0.65rem;opacity:0.7;margin-top:3px;">📊 ${totalPromocion} ventas</div>
             </div>
-            <div class="stat-card" style="background:linear-gradient(135deg,#7c3aed,#8b5cf6);">
-                <div class="stat-number">${totalBoletos}</div>
-                <div class="stat-label">🎫 Total boletos</div>
+            
+            <!-- Tarjeta: Total Pagado -->
+            <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(245,158,11,0.3);">
+                <div class="stat-number" style="font-size:1.6rem;font-weight:700;line-height:1.2;">$${totalPagado.toFixed(2)}</div>
+                <div class="stat-label" style="font-size:0.8rem;opacity:0.9;margin-top:2px;font-weight:600;">💰 Total Cobrado</div>
+                <div style="font-size:0.65rem;opacity:0.7;margin-top:3px;">🎫 ${boletosPagados} boletos</div>
             </div>
-            <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#f97316);">
-                <div class="stat-number" style="font-size:1.2rem;">$${totalPagado.toFixed(2)}</div>
-                <div class="stat-label">💰 Total pagado</div>
-            </div>
+            
+            <!-- Tarjeta: Inconsistencias (solo si hay) -->
             ${invalidos > 0 ? `
-            <div class="stat-card" style="background:linear-gradient(135deg,#dc2626,#ef4444);">
-                <div class="stat-number">${invalidos}</div>
-                <div class="stat-label">⚠️ Inconsistencias</div>
+            <div class="stat-card" style="background:linear-gradient(135deg,#dc2626,#ef4444);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(220,38,38,0.3);">
+                <div class="stat-number" style="font-size:1.6rem;font-weight:700;line-height:1.2;">${invalidos}</div>
+                <div class="stat-label" style="font-size:0.8rem;opacity:0.9;margin-top:2px;font-weight:600;">⚠️ Inconsistencias</div>
+                <div style="font-size:0.65rem;opacity:0.7;margin-top:3px;">revisar totales</div>
             </div>
             ` : ''}
         </div>
@@ -1660,9 +1674,9 @@ function exportBoletosERPToExcel() {
 
     excelData.push([]);
     excelData.push(['RESUMEN']);
+    excelData.push(['Ventas Pagados', totalPagados]);
+    excelData.push(['Ventas Promoción', totalPromocion]);
     excelData.push(['Total Ventas', totalVentas]);
-    excelData.push(['Total Pagados', totalPagados]);
-    excelData.push(['Total Promoción', totalPromocion]);
     excelData.push(['Boletos Pagados', boletosPagados]);
     excelData.push(['Boletos Promoción', boletosPromocion]);
     excelData.push(['Total Boletos', totalBoletos]);
