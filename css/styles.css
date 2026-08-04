@@ -2797,3 +2797,23 @@ code {
     padding-top: 24px !important;
     padding-bottom: 24px !important;
 }
+/* Estilos para la tarjeta de timbres fiscales */
+.saldo-tae-card.timbres-card {
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+    margin-bottom: 16px;
+}
+.saldo-tae-card.timbres-card .saldo-tae-icon {
+    background: rgba(255,255,255,0.15);
+}
+.saldo-tae-card.timbres-card .saldo-tae-label {
+    color: rgba(255,255,255,0.8);
+}
+.saldo-tae-card.timbres-card .saldo-tae-value {
+    color: #fff;
+}
+.timbres-advertencia {
+    color: #fbbf24;
+    font-size: 0.75rem;
+    margin-left: 10px;
+    font-weight: 600;
+}
