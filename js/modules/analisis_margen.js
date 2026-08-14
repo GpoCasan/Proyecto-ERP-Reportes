@@ -168,15 +168,57 @@ async function fetchAllSales(startDate, endDate, categoriaSeleccionada) {
 async function getProductCost(productId) {
     if (!productId || productId === 0) return 0;
     
+    // Verificar caché
     if (costCache.has(productId)) {
         return costCache.get(productId);
     }
     
     try {
-        const costData = await fetchProductCost(productId);
-        const costoConIva = costData?.costoConIva || 0;
-        costCache.set(productId, costoConIva);
-        return costoConIva;
+        // Usar la función fetchProductCost que ya existe en inventarioAccesorios.js
+        if (typeof fetchProductCost === 'function') {
+            const costData = await fetchProductCost(productId);
+            console.log(`📦 Costo raw para producto ${productId}:`, costData);
+            
+            let costoBase = 0;
+            
+            if (typeof costData === 'number') {
+                costoBase = costData;
+            } else if (costData?.data?.cost !== undefined) {
+                costoBase = parseFloat(costData.data.cost) || 0;
+            } else if (costData?.cost !== undefined) {
+                costoBase = parseFloat(costData.cost) || 0;
+            } else if (costData?.data?.costoConIva !== undefined) {
+                costoBase = parseFloat(costData.data.costoConIva) || 0;
+            } else if (costData?.costoConIva !== undefined) {
+                costoBase = parseFloat(costData.costoConIva) || 0;
+            } else {
+                const stringified = JSON.stringify(costData);
+                const numbers = stringified.match(/\d+\.?\d*/g);
+                if (numbers && numbers.length > 0) {
+                    costoBase = parseFloat(numbers[0]) || 0;
+                }
+            }
+            
+            const costoFinal = costoBase * 1.16;
+            costCache.set(productId, costoFinal);
+            return costoFinal;
+        } else {
+            console.warn(`⚠️ fetchProductCost no está disponible, usando implementación local`);
+            const costData = await fetchProductCostLocal(productId);
+            
+            let costoBase = 0;
+            if (typeof costData === 'number') {
+                costoBase = costData;
+            } else if (costData?.data?.cost !== undefined) {
+                costoBase = parseFloat(costData.data.cost) || 0;
+            } else if (costData?.cost !== undefined) {
+                costoBase = parseFloat(costData.cost) || 0;
+            }
+            
+            const costoFinal = costoBase * 1.16;
+            costCache.set(productId, costoFinal);
+            return costoFinal;
+        }
     } catch (error) {
         console.warn(`⚠️ Error obteniendo costo para producto ${productId}:`, error);
         costCache.set(productId, 0);
@@ -184,9 +226,51 @@ async function getProductCost(productId) {
     }
 }
 
-// ==================== PROCESAR DATOS DE MARGEN (OPTIMIZADO) ====================
+// ==================== FUNCIÓN LOCAL PARA OBTENER COSTO ====================
+
+async function fetchProductCostLocal(productId) {
+    if (!productId) return 0;
+    
+    try {
+        if (!CONFIG.API_PRODUCTS) {
+            console.warn('⚠️ CONFIG.API_PRODUCTS no está definido');
+            return 0;
+        }
+        
+        const url = `${CONFIG.API_PRODUCTS}/${productId}/cost`;
+        console.log(`📡 Consultando costo local: ${url}`);
+        
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
+        });
+        
+        if (!response.ok) {
+            console.warn(`⚠️ Error obteniendo producto ${productId}: ${response.status}`);
+            return 0;
+        }
+        
+        const data = await response.json();
+        console.log(`💰 Costo obtenido local:`, data);
+        
+        if (data?.data?.cost !== undefined) {
+            return data.data.cost;
+        } else if (data?.cost !== undefined) {
+            return data.cost;
+        } else {
+            return 0;
+        }
+    } catch (error) {
+        console.error(`❌ Error en fetchProductCostLocal para ${productId}:`, error);
+        return 0;
+    }
+}
+
+// ==================== PROCESAR DATOS DE MARGEN ====================
 
 async function procesarDatosMargen(sales, categoriaFiltro) {
+    console.log('📊 Iniciando procesamiento de datos de margen...');
+    console.log(`📊 ${sales.length} ventas recibidas`);
+    
     const resultados = {
         categorias: {},
         totalProductos: 0,
@@ -212,7 +296,9 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
             totalVenta: 0,
             totalCosto: 0,
             utilidadTotal: 0,
-            margenPromedio: 0
+            margenPromedio: 0,
+            productosConCosto: 0,
+            productosSinCosto: 0
         };
     }
 
@@ -228,7 +314,7 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
         };
     });
 
-    // Primera pasada: recolectar productIds para consultar costos en batch
+    // PRIMERA PASADA: Recolectar productIds y detalles
     const productIdsNeeded = new Set();
     const salesDetails = [];
 
@@ -237,10 +323,8 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
             const productLineId = detail.product?.line_id;
             const productId = detail.product?.id;
             
-            // Solo procesar líneas que nos interesan
             if (![2, 4, 5].includes(productLineId)) continue;
             
-            // Verificar si la categoría está filtrada
             let categoriaKey = null;
             if (productLineId === 4) categoriaKey = 'EQUIPOS_TELCEL';
             else if (productLineId === 5) categoriaKey = 'EQUIPOS_LIBRE';
@@ -255,8 +339,7 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
             const unitPriceConIva = unitPriceSinIva * 1.16;
             const totalProducto = unitPriceConIva * quantity;
 
-            // Determinar rango de precio
-            let rangoKey = 'Más de $5,000';
+            let rangoKey = 'Más de $1,500';
             for (const rango of RANGOS_PRECIO) {
                 if (unitPriceConIva >= rango.min && unitPriceConIva < rango.max) {
                     rangoKey = rango.label;
@@ -271,7 +354,9 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
                 unitPriceConIva,
                 totalProducto,
                 categoriaKey,
-                rangoKey
+                rangoKey,
+                saleId: sale.id,
+                saleDate: sale.created_at
             });
 
             if (productId) {
@@ -280,20 +365,49 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
         }
     }
 
-    // Consultar costos en paralelo con límite de concurrencia
-    const costPromises = Array.from(productIdsNeeded).map(id => getProductCost(id));
-    await Promise.all(costPromises);
+    console.log(`📊 Recolectados ${salesDetails.length} detalles de productos, ${productIdsNeeded.size} productos únicos`);
 
-    // Segunda pasada: procesar con los costos ya obtenidos
+    // SEGUNDA PASADA: Obtener costos en paralelo
+    console.log('💰 Obteniendo costos de productos...');
+    const productIdsArray = Array.from(productIdsNeeded);
+    
+    for (const productId of productIdsArray) {
+        await getProductCost(productId);
+    }
+
+    console.log(`✅ Costos obtenidos para ${costCache.size} productos`);
+
+    console.log('💰 Costos en caché:');
+    let totalCostoAcumulado = 0;
+    for (const [id, costo] of costCache.entries()) {
+        console.log(`   Producto ${id}: $${costo.toFixed(2)}`);
+        totalCostoAcumulado += costo;
+    }
+    console.log(`💰 Total de costos acumulados: $${totalCostoAcumulado.toFixed(2)}`);
+
+    // TERCERA PASADA: Procesar con los costos obtenidos
+    let productosSinCosto = 0;
+    let productosConCosto = 0;
+
+    const productosAgrupados = {};
+
     for (const detalle of salesDetails) {
         const costoConIva = costCache.get(detalle.productId) || 0;
-        const utilidad = detalle.unitPriceConIva - costoConIva;
         
-        // Fórmula correcta: ((Precio - Costo) / Precio) * 100
+        const utilidad = detalle.unitPriceConIva - costoConIva;
         const margen = detalle.unitPriceConIva > 0 ? (utilidad / detalle.unitPriceConIva) * 100 : 0;
 
-        // Verificar si el producto tiene costo 0 (no se puede calcular margen real)
         const sinCosto = costoConIva === 0;
+        
+        if (sinCosto) {
+            productosSinCosto++;
+        } else {
+            productosConCosto++;
+        }
+
+        if (!sinCosto && detalle.productId) {
+            console.log(`✅ Producto CON costo: ID ${detalle.productId}, Nombre: ${detalle.productName}, Costo: $${costoConIva.toFixed(2)}, Precio: $${detalle.unitPriceConIva.toFixed(2)}, Margen: ${margen.toFixed(1)}%`);
+        }
 
         const productoData = {
             nombre: detalle.productName,
@@ -306,10 +420,35 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
             margen: margen,
             categoria: detalle.categoriaKey,
             rangoPrecio: detalle.rangoKey,
-            sinCosto: sinCosto
+            sinCosto: sinCosto,
+            saleId: detalle.saleId,
+            saleDate: detalle.saleDate
         };
 
-        // Agregar a la categoría (siempre, incluso sin costo)
+        if (detalle.productId) {
+            if (!productosAgrupados[detalle.productId]) {
+                productosAgrupados[detalle.productId] = {
+                    productId: detalle.productId,
+                    nombre: detalle.productName,
+                    cantidadTotal: 0,
+                    precioUnitario: detalle.unitPriceConIva,
+                    totalVenta: 0,
+                    costoUnitario: costoConIva,
+                    utilidadTotal: 0,
+                    margen: margen,
+                    categoria: detalle.categoriaKey,
+                    sinCosto: sinCosto
+                };
+            }
+            
+            productosAgrupados[detalle.productId].cantidadTotal += detalle.quantity;
+            productosAgrupados[detalle.productId].totalVenta += detalle.totalProducto;
+            productosAgrupados[detalle.productId].utilidadTotal += utilidad * detalle.quantity;
+            const totalVenta = productosAgrupados[detalle.productId].totalVenta;
+            const utilidadTotal = productosAgrupados[detalle.productId].utilidadTotal;
+            productosAgrupados[detalle.productId].margen = totalVenta > 0 ? (utilidadTotal / totalVenta) * 100 : 0;
+        }
+
         if (resultados.categorias[detalle.categoriaKey]) {
             resultados.categorias[detalle.categoriaKey].productos.push(productoData);
             resultados.categorias[detalle.categoriaKey].totalUnidades += detalle.quantity;
@@ -318,7 +457,6 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
             resultados.categorias[detalle.categoriaKey].utilidadTotal += utilidad * detalle.quantity;
         }
 
-        // Agregar al rango de precio
         if (resultados.porRangoPrecio[detalle.rangoKey]) {
             resultados.porRangoPrecio[detalle.rangoKey].productos.push(productoData);
             resultados.porRangoPrecio[detalle.rangoKey].totalUnidades += detalle.quantity;
@@ -327,12 +465,10 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
             resultados.porRangoPrecio[detalle.rangoKey].utilidadTotal += utilidad * detalle.quantity;
         }
 
-        // Totales generales
         resultados.totalProductos += detalle.quantity;
         resultados.totalVentas += detalle.totalProducto;
         resultados.totalUtilidad += utilidad * detalle.quantity;
 
-        // Productos destacados - solo si tienen costo > 0
         if (!sinCosto) {
             if (!resultados.productosDestacados.mejorMargen || margen > resultados.productosDestacados.mejorMargen.margen) {
                 resultados.productosDestacados.mejorMargen = { ...productoData };
@@ -341,32 +477,50 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
                 resultados.productosDestacados.peorMargen = { ...productoData };
             }
         }
-        
-        // Más vendido (independientemente del costo)
-        if (!resultados.productosDestacados.masVendido || detalle.quantity > resultados.productosDestacados.masVendido.cantidad) {
-            resultados.productosDestacados.masVendido = { ...productoData };
+    }
+
+    let masVendido = null;
+    let maxCantidad = 0;
+    
+    for (const [productId, producto] of Object.entries(productosAgrupados)) {
+        if (producto.cantidadTotal > maxCantidad) {
+            maxCantidad = producto.cantidadTotal;
+            masVendido = {
+                nombre: producto.nombre,
+                productId: producto.productId,
+                cantidad: producto.cantidadTotal,
+                precioUnitario: producto.precioUnitario,
+                total: producto.totalVenta,
+                costoUnitario: producto.costoUnitario,
+                utilidad: producto.utilidadTotal,
+                margen: producto.margen,
+                categoria: producto.categoria,
+                sinCosto: producto.sinCosto
+            };
         }
     }
+    
+    resultados.productosDestacados.masVendido = masVendido;
 
-    // Calcular márgenes promedio por categoría (excluyendo productos sin costo)
+    console.log(`📊 Producto más vendido: ${masVendido?.nombre} (${masVendido?.cantidad} unidades)`);
+    console.log(`📊 Productos con costo: ${productosConCosto}, sin costo: ${productosSinCosto}`);
+
     for (const [key, cat] of Object.entries(resultados.categorias)) {
-        const productosConCosto = cat.productos.filter(p => !p.sinCosto);
-        const totalVentaConCosto = productosConCosto.reduce((sum, p) => sum + p.total, 0);
-        const totalUtilidadConCosto = productosConCosto.reduce((sum, p) => sum + p.utilidad, 0);
+        const productosConCostoFilter = cat.productos.filter(p => !p.sinCosto);
+        const totalVentaConCosto = productosConCostoFilter.reduce((sum, p) => sum + p.total, 0);
+        const totalUtilidadConCosto = productosConCostoFilter.reduce((sum, p) => sum + p.utilidad, 0);
         cat.margenPromedio = totalVentaConCosto > 0 ? (totalUtilidadConCosto / totalVentaConCosto) * 100 : 0;
-        cat.productosConCosto = productosConCosto.length;
-        cat.productosSinCosto = cat.productos.length - productosConCosto.length;
+        cat.productosConCosto = productosConCostoFilter.length;
+        cat.productosSinCosto = cat.productos.length - productosConCostoFilter.length;
     }
 
-    // Calcular márgenes promedio por rango de precio (excluyendo productos sin costo)
     for (const [key, rango] of Object.entries(resultados.porRangoPrecio)) {
-        const productosConCosto = rango.productos.filter(p => !p.sinCosto);
-        const totalVentaConCosto = productosConCosto.reduce((sum, p) => sum + p.total, 0);
-        const totalUtilidadConCosto = productosConCosto.reduce((sum, p) => sum + p.utilidad, 0);
+        const productosConCostoFilter = rango.productos.filter(p => !p.sinCosto);
+        const totalVentaConCosto = productosConCostoFilter.reduce((sum, p) => sum + p.total, 0);
+        const totalUtilidadConCosto = productosConCostoFilter.reduce((sum, p) => sum + p.utilidad, 0);
         rango.margenPromedio = totalVentaConCosto > 0 ? (totalUtilidadConCosto / totalVentaConCosto) * 100 : 0;
     }
 
-    // Margen promedio general (excluyendo productos sin costo)
     const productosConCostoGlobal = salesDetails.filter(d => costCache.get(d.productId) > 0);
     const totalVentaConCostoGlobal = productosConCostoGlobal.reduce((sum, d) => sum + d.totalProducto, 0);
     const totalUtilidadConCostoGlobal = productosConCostoGlobal.reduce((sum, d) => {
@@ -375,6 +529,7 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
     }, 0);
     resultados.margenPromedioGeneral = totalVentaConCostoGlobal > 0 ? (totalUtilidadConCostoGlobal / totalVentaConCostoGlobal) * 100 : 0;
 
+    console.log(`📊 Margen promedio general: ${resultados.margenPromedioGeneral.toFixed(2)}%`);
     return resultados;
 }
 
@@ -383,7 +538,6 @@ async function procesarDatosMargen(sales, categoriaFiltro) {
 function renderResultadosMargen(resultados, categoriaFiltro, startDate, endDate) {
     const container = document.getElementById('analisisMargenResults');
     
-    // Tarjetas de resumen
     const statsHtml = `
         <div class="stats" style="margin-bottom: 24px;">
             <div class="stat-card" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);">
@@ -405,7 +559,6 @@ function renderResultadosMargen(resultados, categoriaFiltro, startDate, endDate)
         </div>
     `;
 
-    // Productos destacados
     const destacadosHtml = `
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
             <div class="stat-card" style="background: linear-gradient(135deg, #10b981 0%, #34d399 100%); cursor: default; padding: 16px; color: white;">
@@ -429,7 +582,6 @@ function renderResultadosMargen(resultados, categoriaFiltro, startDate, endDate)
         </div>
     `;
 
-    // Tabla de categorías - CON BARRA DE CONTRIBUCIÓN A LA UTILIDAD TOTAL
     let categoriasHtml = `
         <h4 style="color: #1e40af; margin-bottom: 12px;">📊 Margen por Categoría</h4>
         <div class="table-container">
@@ -447,23 +599,16 @@ function renderResultadosMargen(resultados, categoriaFiltro, startDate, endDate)
                 <tbody>
     `;
 
-    // Calcular la utilidad total de todas las categorías
     const utilidadTotalGeneral = Object.values(resultados.categorias).reduce((sum, cat) => sum + cat.utilidadTotal, 0);
 
     for (const [key, cat] of Object.entries(resultados.categorias)) {
         if (cat.productos.length === 0) continue;
         
-        // Margen real (0-100%) - solo para mostrar el número
         const margenDisplay = cat.margenPromedio;
-        
-        // Contribución a la utilidad total (%)
         const contribucionPorcentaje = utilidadTotalGeneral > 0 ? (cat.utilidadTotal / utilidadTotalGeneral) * 100 : 0;
         const barWidthContribucion = Math.min(contribucionPorcentaje, 100);
-        
         const color = cat.color || '#64748b';
         const margenColor = cat.margenPromedio >= 40 ? '#10b981' : cat.margenPromedio >= 25 ? '#f59e0b' : '#ef4444';
-        
-        // Mostrar advertencia si hay productos sin costo
         const sinCostoWarning = cat.productosSinCosto > 0 ? 
             `<span style="font-size: 0.6rem; color: #f59e0b; margin-left: 4px;" title="${cat.productosSinCosto} productos sin costo">⚠️</span>` : '';
         
@@ -494,7 +639,6 @@ function renderResultadosMargen(resultados, categoriaFiltro, startDate, endDate)
         </div>
     `;
 
-    // Tabla de rangos de precio
     let rangosHtml = `
         <h4 style="color: #1e40af; margin: 24px 0 12px;">💰 Margen por Rango de Precio</h4>
         <div class="table-container">
@@ -513,9 +657,7 @@ function renderResultadosMargen(resultados, categoriaFiltro, startDate, endDate)
 
     for (const [rangoLabel, rangoData] of Object.entries(resultados.porRangoPrecio)) {
         if (rangoData.productos.length === 0) continue;
-        
         const margenColor = rangoData.margenPromedio >= 40 ? '#10b981' : rangoData.margenPromedio >= 25 ? '#f59e0b' : '#ef4444';
-        
         rangosHtml += `
             <tr>
                 <td><strong>${rangoLabel}</strong></td>
@@ -535,7 +677,6 @@ function renderResultadosMargen(resultados, categoriaFiltro, startDate, endDate)
         </div>
     `;
 
-    // Botón de exportar
     const exportHtml = `
         <div style="display: flex; justify-content: flex-end; margin-top: 24px; gap: 10px;">
             <button id="exportAnalisisMargenBtn" class="btn-export-excel" style="background: #059669; padding: 8px 16px; border-radius: 8px; color: white; border: none; cursor: pointer;">
@@ -547,13 +688,18 @@ function renderResultadosMargen(resultados, categoriaFiltro, startDate, endDate)
     container.innerHTML = statsHtml + destacadosHtml + categoriasHtml + rangosHtml + exportHtml;
     container.style.display = 'block';
 
-    // Event listener para exportar
     const exportBtn = document.getElementById('exportAnalisisMargenBtn');
     if (exportBtn) {
-        exportBtn.addEventListener('click', () => exportAnalisisMargenToExcel(resultados, startDate, endDate));
+        const newExportBtn = exportBtn.cloneNode(true);
+        exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
+        newExportBtn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🖱️ Click en exportar análisis de margen');
+            exportAnalisisMargenToExcel(resultados, startDate, endDate);
+        };
     }
 
-    // Renderizar gráfica
     setTimeout(() => renderMargenChart(resultados), 300);
 }
 
@@ -576,6 +722,11 @@ function renderMargenChart(resultados) {
         labels.push(cat.label);
         data.push(cat.margenPromedio);
         colors.push(cat.color || '#64748b');
+    }
+
+    if (labels.length === 0) {
+        console.warn('No hay datos para mostrar en la gráfica');
+        return;
     }
 
     window.margenChartInstance = new Chart(ctx, {
@@ -620,9 +771,18 @@ function renderMargenChart(resultados) {
     });
 }
 
-// ==================== EXPORTAR A EXCEL ====================
+// ==================== EXPORTAR A EXCEL (SOLO ESTA PARTE FUE MODIFICADA) ====================
 
 function exportAnalisisMargenToExcel(resultados, startDate, endDate) {
+    // Verificar que hay datos
+    if (!resultados || !resultados.categorias) {
+        alert('⚠️ No hay datos para exportar');
+        return;
+    }
+
+    console.log('📊 [EXPORT] Preparando datos para exportar...');
+
+    // Preparar datos para Excel
     const excelData = [
         ['ANÁLISIS DE MARGEN POR CATEGORÍA'],
         [`Período: ${formatDate(startDate)} - ${formatDate(endDate)}`],
@@ -632,7 +792,6 @@ function exportAnalisisMargenToExcel(resultados, startDate, endDate) {
         ['Categoría', 'Unidades', 'Venta Total', 'Utilidad', 'Margen (%)', 'Contribución (%)']
     ];
 
-    // Calcular utilidad total para contribuciones
     const utilidadTotalGeneral = Object.values(resultados.categorias).reduce((sum, cat) => sum + cat.utilidadTotal, 0);
 
     for (const [key, cat] of Object.entries(resultados.categorias)) {
@@ -695,12 +854,74 @@ function exportAnalisisMargenToExcel(resultados, startDate, endDate) {
         ]);
     }
 
-    if (typeof exportToExcel === 'function') {
-        exportToExcel(excelData, `analisis_margen_${startDate}_${endDate}`);
-    } else {
-        console.error('La función exportToExcel no está disponible');
-        alert('Error: No se pudo exportar. La función de exportación no está disponible.');
+    console.log('📊 [EXPORT] Datos preparados:', excelData.length, 'filas');
+
+    // ==== IMPLEMENTACIÓN DIRECTA CON XLSX ====
+    try {
+        if (typeof XLSX === 'undefined') {
+            console.error('❌ [EXPORT] XLSX no está disponible');
+            alert('❌ Error: La librería XLSX no está disponible.');
+            return;
+        }
+
+        console.log('📊 [EXPORT] Creando archivo Excel con XLSX...');
+        
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        ws['!cols'] = excelData[0].map(() => ({ wch: 25 }));
+        XLSX.utils.book_append_sheet(wb, ws, 'Análisis Margen');
+        
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { 
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
+        
+        if (blob.size === 0) {
+            console.error('❌ [EXPORT] El blob está vacío');
+            alert('❌ Error: El archivo generado está vacío.');
+            return;
+        }
+        
+        const url = URL.createObjectURL(blob);
+        const filename = `analisis_margen_${startDate}_${endDate}.xlsx`;
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        
+        setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            console.log('✅ [EXPORT] Archivo descargado y limpieza completada');
+        }, 200);
+        
+        console.log(`✅ [EXPORT] Archivo Excel generado: ${filename}`);
+        showInfo('analisisMargen', '✅ Exportación completada correctamente', false);
+        
+    } catch (error) {
+        console.error('❌ [EXPORT] Error exportando a Excel:', error);
+        alert('❌ Error al exportar: ' + error.message);
     }
+}
+
+// ==================== UTILIDADES ====================
+
+function escapeHtml(text) {
+    if (!text) return 'N/A';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
 }
 
 // ==================== INICIALIZAR MÓDULO ====================
@@ -708,7 +929,6 @@ function exportAnalisisMargenToExcel(resultados, startDate, endDate) {
 function initAnalisisMargenModule() {
     console.log('🔄 Inicializando módulo de análisis de margen...');
     
-    // Configurar fechas por defecto (últimos 30 días)
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 30);
@@ -729,13 +949,14 @@ function initAnalisisMargenModule() {
         endInput.value = `${year}-${month}-${day}`;
     }
     
-    // Configurar event listener del botón
     const searchBtn = document.getElementById('searchAnalisisMargenBtn');
     if (searchBtn) {
         const newBtn = searchBtn.cloneNode(true);
         searchBtn.parentNode.replaceChild(newBtn, searchBtn);
         newBtn.addEventListener('click', searchAnalisisMargen);
     }
+    
+    console.log('✅ Módulo de análisis de margen inicializado');
 }
 
 // ==================== EXPORTAR FUNCIONES GLOBALES ====================
