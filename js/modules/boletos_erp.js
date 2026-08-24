@@ -4,7 +4,114 @@
 
 const BOLETOS_PRODUCT_NOTA = 1316;      // Boleto Rifa Promo PAYJOY (PROMOCIÓN)
 const BOLETOS_PRODUCT_REFERENCIA = 1315; // Boleto RIFA (PAGADO)
-const PRECIO_BOLETO = 20;
+const PRECIO_BOLETO = 25;
+
+// Catálogo de las siete rifas. La rifa de la tele conserva la lógica
+// anterior de producto + servicio; las demás se consultan por servicio.
+const RIFAS_CONFIG = Object.freeze({
+    tele: {
+        id: 'tele',
+        nombre: 'Rifa de la Tele',
+        esTele: true,
+        precioBoleto: PRECIO_BOLETO,
+        productoNotaId: BOLETOS_PRODUCT_NOTA,
+        productoReferenciaId: BOLETOS_PRODUCT_REFERENCIA,
+        servicioIds: [BOLETOS_PRODUCT_REFERENCIA]
+    },
+    rifa1350: { id: 'rifa1350', nombre: 'Rifa Conkal', esTele: false, precioBoleto: 10, servicioIds: [1350] },
+    rifa1351: { id: 'rifa1351', nombre: 'Rifa Temax', esTele: false, precioBoleto: 10, servicioIds: [1351] },
+    rifa1352: { id: 'rifa1352', nombre: 'Rifa Morelos', esTele: false, precioBoleto: 10, servicioIds: [1352] },
+    rifa1353: { id: 'rifa1353', nombre: 'Rifa Tzucacab', esTele: false, precioBoleto: 10, servicioIds: [1353] },
+    rifa1354: { id: 'rifa1354', nombre: 'Rifa Baca', esTele: false, precioBoleto: 10, servicioIds: [1354] },
+    rifa1355: { id: 'rifa1355', nombre: 'Rifa Xocchel', esTele: false, precioBoleto: 10, servicioIds: [1355] }
+});
+
+let rifaSeleccionadaId = 'tele';
+
+function obtenerRifaSeleccionada() {
+    const select = document.getElementById('boletosRifaSelect');
+    const id = select?.value || rifaSeleccionadaId;
+    return RIFAS_CONFIG[id] || RIFAS_CONFIG.tele;
+}
+
+function cambiarRifaBoletos() {
+    const select = document.getElementById('boletosRifaSelect');
+    if (select) rifaSeleccionadaId = select.value;
+
+    const rifa = obtenerRifaSeleccionada();
+    currentResults = [];
+    window._boletosERPData = null;
+    window._boletosResumenData = null;
+    sortDirection = {};
+    currentPage = 1;
+
+    const results = document.getElementById('boletosResults');
+    if (results) {
+        results.innerHTML = '';
+        results.style.display = 'none';
+    }
+
+    const info = document.getElementById('boletosInfoAlert');
+    if (info) {
+        info.textContent = `Rifa seleccionada: ${rifa.nombre}. Selecciona el período y consulta.`;
+        info.style.display = 'block';
+    }
+
+    const error = document.getElementById('boletosErrorAlert');
+    if (error) error.style.display = 'none';
+}
+
+function crearSelectorRifas() {
+    let select = document.getElementById('boletosRifaSelect');
+    let selectorWrapper = document.getElementById('boletosRifaSelectorWrapper');
+
+    if (!selectorWrapper) {
+        selectorWrapper = document.createElement('div');
+        selectorWrapper.id = 'boletosRifaSelectorWrapper';
+
+        const label = document.createElement('label');
+        label.htmlFor = 'boletosRifaSelect';
+        label.textContent = '🎫 Rifa a consultar';
+        label.style.cssText = 'font-weight:600;color:#1e293b;font-size:0.95rem;';
+        selectorWrapper.appendChild(label);
+    }
+
+    if (!select) {
+        select = document.createElement('select');
+        select.id = 'boletosRifaSelect';
+        select.setAttribute('aria-label', 'Seleccionar rifa');
+    }
+
+    // El selector ocupa toda la columna izquierda y queda separado del botón.
+    selectorWrapper.style.cssText = 'display:flex;flex-direction:column;gap:8px;width:100%;max-width:100%;min-width:0;margin:0 0 16px 0;align-self:stretch;order:initial;';
+    select.style.cssText = 'width:100%;min-height:54px;padding:14px 16px;border:2px solid #e2e8f0;border-radius:8px;background:white;color:#1e293b;font-size:1.05rem;font-weight:700;cursor:pointer;outline:none;box-sizing:border-box;';
+
+    // Si el selector ya estaba en la columna derecha, se mueve dentro del bloque
+    // de Fecha Inicio, antes de su etiqueta y campo.
+    const fechaInicio = document.getElementById('boletosStartDate');
+    const bloqueFechaInicio = fechaInicio?.closest('.form-group, .date-group, .input-group') || fechaInicio?.parentElement;
+
+    if (bloqueFechaInicio) {
+        if (select.parentNode !== selectorWrapper) selectorWrapper.appendChild(select);
+        if (selectorWrapper.parentNode !== bloqueFechaInicio) {
+            bloqueFechaInicio.insertBefore(selectorWrapper, bloqueFechaInicio.firstChild);
+        }
+    } else if (select.parentNode !== selectorWrapper) {
+        selectorWrapper.appendChild(select);
+        const boton = document.getElementById('consultarBoletosBtn');
+        if (boton?.parentNode) {
+            boton.parentNode.insertBefore(selectorWrapper, boton);
+        } else {
+            document.body.insertBefore(selectorWrapper, document.body.firstChild);
+        }
+    }
+
+    select.innerHTML = Object.values(RIFAS_CONFIG)
+        .map(rifa => `<option value="${rifa.id}">${rifa.nombre}</option>`)
+        .join('');
+    select.value = RIFAS_CONFIG[rifaSeleccionadaId] ? rifaSeleccionadaId : 'tele';
+    select.onchange = cambiarRifaBoletos;
+}
 
 // Variable para controlar el ordenamiento
 let sortDirection = {};
@@ -590,23 +697,44 @@ function cerrarBuscadorBoletos() {
 
 // ==================== FUNCIÓN PARA OBTENER TODAS LAS VENTAS (PAGINACIÓN COMPLETA) ====================
 
-async function obtenerTodasLasVentas(startFormatted, endFormatted) {
+function agregarFiltrosRifa(url, rifa) {
+    if (!rifa || !Array.isArray(rifa.servicioIds) || rifa.servicioIds.length !== 1) {
+        throw new Error('La rifa seleccionada no tiene configurado exactamente un servicio');
+    }
+
+    if (rifa.esTele) {
+        return url
+            + `&product_ids[]=${rifa.productoNotaId}`
+            + `&product_ids[]=${rifa.productoReferenciaId}`
+            + `&service_ids[]=${rifa.servicioIds[0]}`;
+    }
+
+    // Las rifas adicionales se consultan como servicios y requieren
+    // producto + servicio con el mismo ID, además de sale_type=services.
+    const servicioId = rifa.servicioIds[0];
+    return url
+        + `&product_ids[]=${servicioId}`
+        + `&service_ids[]=${servicioId}`
+        + '&sale_type=services';
+}
+
+async function obtenerTodasLasVentas(startFormatted, endFormatted, rifa = obtenerRifaSeleccionada()) {
     let todasLasVentas = [];
     let pagina = 1;
-    const porPagina = 100;
+    const porPagina = 10;
     let total = 0;
     
-    console.log(`📡 [BOLETOS ERP] Obteniendo todas las ventas...`);
+    console.log(`📡 [BOLETOS ERP] Obteniendo ventas de ${rifa.nombre}...`);
     
     do {
+        // Se conserva el formato manual de la versión original, porque el
+        // endpoint del ERP espera los corchetes y el signo + sin recodificar.
         let url = `${CONFIG.API_SALES_ENDPOINT}?page=${pagina}&per_page=${porPagina}&total=0`;
         url += `&start_date=${startFormatted}`;
         url += `&end_date=${endFormatted}`;
-        url += `&product_ids[]=${BOLETOS_PRODUCT_NOTA}`;
-        url += `&product_ids[]=${BOLETOS_PRODUCT_REFERENCIA}`;
-        url += `&service_ids[]=${BOLETOS_PRODUCT_REFERENCIA}`;
-        
-        console.log(`📡 [BOLETOS ERP] Página ${pagina}: ${url}`);
+
+        url = agregarFiltrosRifa(url, rifa);
+        console.log(`📡 [BOLETOS ERP] Página ${pagina} (${rifa.nombre}): ${url}`);
         
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${CONFIG.FIXED_TOKEN}` }
@@ -625,22 +753,50 @@ async function obtenerTodasLasVentas(startFormatted, endFormatted) {
         todasLasVentas = todasLasVentas.concat(ventas);
         pagina++;
         
-        // Si no hay más ventas, salir
         if (ventas.length === 0) break;
-        
-        // Si ya tenemos todas las ventas, salir
         if (todasLasVentas.length >= total) break;
         
     } while (true);
     
-    console.log(`✅ [BOLETOS ERP] Total de ventas obtenidas: ${todasLasVentas.length}`);
+    console.log(`✅ [BOLETOS ERP] Total de ventas obtenidas para ${rifa.nombre}: ${todasLasVentas.length}`);
     return todasLasVentas;
 }
 
 // ==================== FUNCIÓN PRINCIPAL (CONSULTAR VENTAS) ====================
 
+function obtenerValorDetalle(detail, keys) {
+    for (const key of keys) {
+        const value = detail?.[key];
+        if (value !== null && value !== undefined && String(value).trim() !== '') {
+            return value;
+        }
+    }
+    return null;
+}
+
+function obtenerIdServicioDetalle(detail) {
+    return Number(detail?.service_id ?? detail?.service?.id ?? detail?.serviceId ?? 0);
+}
+
+function validarTotalBoletos(total, cantidad, precio, ventaId) {
+    if (!cantidad || cantidad <= 0) {
+        return { esValido: true, mensaje: '' };
+    }
+
+    const totalEsperado = cantidad * precio;
+    const diferencia = Math.abs(Number(total || 0) - totalEsperado);
+    if (diferencia <= 0.01) {
+        return { esValido: true, mensaje: '' };
+    }
+
+    const mensaje = `⚠️ Total $${Number(total || 0).toFixed(2)} no coincide con ${cantidad} boletos de $${precio.toFixed(2)} ($${totalEsperado.toFixed(2)})`;
+    console.warn(`⚠️ Venta ${ventaId}: ${mensaje}`);
+    return { esValido: false, mensaje };
+}
+
 async function consultarBoletosERP() {
-    console.log('🎫 [BOLETOS ERP] Consultando ventas de boletos...');
+    const rifa = obtenerRifaSeleccionada();
+    console.log(`🎫 [BOLETOS ERP] Consultando ${rifa.nombre}...`);
 
     const startDate = document.getElementById('boletosStartDate').value;
     const endDate = document.getElementById('boletosEndDate').value;
@@ -652,6 +808,8 @@ async function consultarBoletosERP() {
     }
 
     const btn = document.getElementById('consultarBoletosBtn');
+    if (!btn) throw new Error('No se encontró el botón de consulta de boletos');
+
     const originalText = btn.innerHTML;
     btn.innerHTML = 'Consultando... <span class="loading-spinner"></span>';
     btn.disabled = true;
@@ -663,23 +821,19 @@ async function consultarBoletosERP() {
     try {
         const range = getDateRangeBoletos(startDate, endDate);
         if (!range) throw new Error('Error en el rango de fechas');
-        
-        const startFormatted = range.start;
-        const endFormatted = range.end;
 
-        // Obtener todas las ventas con paginación completa
-        const ventas = await obtenerTodasLasVentas(startFormatted, endFormatted);
-
-        console.log(`✅ [BOLETOS ERP] ${ventas.length} ventas encontradas en total`);
+        const ventas = await obtenerTodasLasVentas(range.start, range.end, rifa);
+        console.log(`✅ [BOLETOS ERP] ${ventas.length} ventas encontradas para ${rifa.nombre}`);
 
         const resultados = [];
 
         ventas.forEach(sale => {
-            const detalles = sale.details || [];
+            const detalles = Array.isArray(sale.details) ? sale.details : [];
             let nota1 = null;
             let nota1_2 = null;
             let referencia1 = null;
             let referencia2 = null;
+            let detalleServicioRifa = null;
             let tipo = null;
             let cantidadBoletos = 0;
             let boletosExtraidos = [];
@@ -688,10 +842,11 @@ async function consultarBoletosERP() {
             let totalPagadoProducto = 0;
 
             detalles.forEach(detail => {
-                const productId = detail.product_id;
+                const productId = Number(detail.product_id);
+                const serviceId = obtenerIdServicioDetalle(detail);
                 const totalAmount = parseFloat(detail.total_amount) || parseFloat(detail.total) || 0;
-                
-                if (productId === BOLETOS_PRODUCT_NOTA) {
+
+                if (rifa.esTele && productId === rifa.productoNotaId) {
                     tipo = 'promocion';
                     cantidadBoletos = 1;
                     nota1 = detail.note || null;
@@ -699,108 +854,131 @@ async function consultarBoletosERP() {
                     totalPagadoProducto = totalAmount;
                 }
 
-                if (productId === BOLETOS_PRODUCT_REFERENCIA) {
+                if (rifa.esTele && productId === rifa.productoReferenciaId) {
                     tipo = 'pagado';
                     referencia1 = detail.reference_1 || null;
                     referencia2 = detail.reference_2 || null;
                     totalPagadoProducto = totalAmount;
                 }
+
+                const esServicioRifa = !rifa.esTele && rifa.servicioIds.some(id =>
+                    id === serviceId || id === productId
+                );
+
+                if (esServicioRifa) {
+                    detalleServicioRifa = detail;
+                    tipo = 'pagado';
+                    referencia1 = obtenerValorDetalle(detail, [
+                        'reference_1', 'reference1', 'phone', 'telephone', 'note'
+                    ]);
+                    referencia2 = obtenerValorDetalle(detail, [
+                        'reference_2', 'reference2', 'ticket', 'tickets', 'note_2'
+                    ]);
+                    totalPagadoProducto = totalAmount;
+                }
             });
 
-            if (nota1 || referencia1) {
+            const tieneDatos = rifa.esTele
+                ? (nota1 || referencia1)
+                : detalleServicioRifa;
+
+            if (!tieneDatos) return;
+
+            if (rifa.esTele) {
                 if (referencia1) {
                     tipo = 'pagado';
                     const separado = extraerTelefonoYBoleto(referencia2 || '');
                     boletosExtraidos = separado.boletos;
                     cantidadBoletos = boletosExtraidos.length;
-                    
-                    const totalEsperado = cantidadBoletos * PRECIO_BOLETO;
-                    
-                    if (cantidadBoletos > 0 && totalPagadoProducto !== totalEsperado) {
-                        esValido = false;
-                        mensajeValidacion = `⚠️ Total $${totalPagadoProducto} no coincide con ${cantidadBoletos} boletos ($${totalEsperado})`;
-                        console.warn(`⚠️ Venta ${sale.id}: ${mensajeValidacion}`);
-                    }
-                    
+
+                    // La validación se realiza después, usando el precio de la rifa.
+                    // La promoción no se valida porque no representa un cobro de boletos.
                 } else if (nota1) {
                     tipo = 'promocion';
                     const separado = extraerTelefonoYBoleto(nota1_2 || '');
                     boletosExtraidos = separado.boletos;
                     cantidadBoletos = boletosExtraidos.length > 0 ? boletosExtraidos.length : 1;
-                    
-                    if (cantidadBoletos === 0) {
-                        cantidadBoletos = 1;
-                    }
                 }
+            } else {
+                tipo = 'pagado';
+                const separado1 = extraerTelefonoYBoleto(referencia1 || '');
+                const separado2 = extraerTelefonoYBoleto(referencia2 || '');
+                boletosExtraidos = separado2.boletos.length > 0 ? separado2.boletos : separado1.boletos;
+                cantidadBoletos = boletosExtraidos.length;
 
-                const dato1Separado = extraerTelefonoYBoleto(tipo === 'pagado' ? referencia1 : nota1);
-                const telefono1 = dato1Separado.telefono;
-                const boletos1 = dato1Separado.boletos;
-                
-                const dato2Separado = extraerTelefonoYBoleto(tipo === 'pagado' ? referencia2 : nota1_2);
-                let boletos2 = dato2Separado.boletos;
-                if (boletos2.length === 0 && boletos1.length > 0) {
-                    boletos2 = boletos1;
+                const cantidadDetalle = Number(detalleServicioRifa?.quantity ?? detalleServicioRifa?.qty ?? 0);
+                if (cantidadBoletos === 0 && Number.isFinite(cantidadDetalle) && cantidadDetalle > 0) {
+                    cantidadBoletos = cantidadDetalle;
                 }
-                
-                const mostrarDato1 = telefono1 || (tipo === 'pagado' ? referencia1 : nota1) || 'N/A';
-                const mostrarDato2 = boletos2.length > 0 ? boletos2.join(', ') : (tipo === 'pagado' ? referencia2 : nota1_2) || 'N/A';
-
-                const item = {
-                    ventaId: sale.id,
-                    folio: sale.folio || sale.id,
-                    fecha: sale.created_at,
-                    sucursal: sale.warehouse?.branch?.name || 'N/A',
-                    vendedor: sale.user?.name || 'N/A',
-                    cliente: sale.client?.name || 'N/A',
-                    total: totalPagadoProducto,
-                    tipo: tipo,
-                    cantidadBoletos: cantidadBoletos,
-                    dato1: mostrarDato1,
-                    dato2: mostrarDato2,
-                    _dato1Original: tipo === 'pagado' ? referencia1 : nota1,
-                    _dato2Original: tipo === 'pagado' ? referencia2 : nota1_2,
-                    telefono: telefono1,
-                    boletos: boletos2,
-                    tieneDato: tipo === 'pagado' ? !!referencia1 : !!nota1,
-                    esValido: esValido,
-                    mensajeValidacion: mensajeValidacion
-                };
-                
-                resultados.push(item);
             }
+
+            const dato1Original = tipo === 'pagado' ? referencia1 : nota1;
+            if (tipo === 'pagado') {
+                const validacion = validarTotalBoletos(
+                    totalPagadoProducto,
+                    cantidadBoletos,
+                    rifa.precioBoleto,
+                    sale.id
+                );
+                esValido = validacion.esValido;
+                mensajeValidacion = validacion.mensaje;
+            }
+
+            const dato2Original = tipo === 'pagado' ? referencia2 : nota1_2;
+            const dato1Separado = extraerTelefonoYBoleto(dato1Original || '');
+            const dato2Separado = extraerTelefonoYBoleto(dato2Original || '');
+            let boletos2 = dato2Separado.boletos;
+            if (boletos2.length === 0 && boletosExtraidos.length > 0) boletos2 = boletosExtraidos;
+            if (boletos2.length === 0 && dato1Separado.boletos.length > 0) boletos2 = dato1Separado.boletos;
+
+            resultados.push({
+                ventaId: sale.id,
+                folio: sale.folio || sale.id,
+                fecha: sale.created_at,
+                sucursal: sale.warehouse?.branch?.name || 'N/A',
+                vendedor: sale.user?.name || 'N/A',
+                cliente: sale.client?.name || 'N/A',
+                rifa: rifa.nombre,
+                rifaId: rifa.id,
+                precioBoleto: rifa.precioBoleto,
+                total: totalPagadoProducto,
+                tipo,
+                cantidadBoletos,
+                dato1: dato1Separado.telefono || dato1Original || 'N/A',
+                dato2: boletos2.length > 0 ? boletos2.join(', ') : dato2Original || 'N/A',
+                _dato1Original: dato1Original,
+                _dato2Original: dato2Original,
+                telefono: dato1Separado.telefono,
+                boletos: boletos2,
+                tieneDato: !!dato1Original || !!dato2Original,
+                esValido,
+                mensajeValidacion
+            });
         });
 
         resultados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
         currentResults = resultados;
         window._boletosERPData = resultados;
         sortDirection = {};
         currentPage = 1;
-
         mostrarResultadosBoletosERP(resultados);
 
         if (resultados.length === 0) {
-            document.getElementById('boletosInfoAlert').textContent = '⚠️ No se encontraron ventas de boletos en el período.';
+            document.getElementById('boletosInfoAlert').textContent = `⚠️ No se encontraron ventas de ${rifa.nombre} en el período.`;
             document.getElementById('boletosInfoAlert').style.display = 'block';
         } else {
             const totalPagados = resultados.filter(r => r.tipo === 'pagado').length;
             const totalPromocion = resultados.filter(r => r.tipo === 'promocion').length;
             const totalBoletos = resultados.reduce((sum, r) => sum + r.cantidadBoletos, 0);
-            const totalPagado = resultados
-                .filter(r => r.tipo === 'pagado')
-                .reduce((sum, r) => sum + r.total, 0);
+            const totalPagado = resultados.filter(r => r.tipo === 'pagado').reduce((sum, r) => sum + r.total, 0);
             const invalidos = resultados.filter(r => !r.esValido).length;
-            let mensaje = `✅ ${resultados.length} registros | ${totalPagados} pagados, ${totalPromocion} promoción | ${totalBoletos} boletos totales | Total pagado: $${totalPagado.toFixed(2)}`;
-            if (invalidos > 0) {
-                mensaje += ` ⚠️ ${invalidos} con inconsistencia`;
-            }
+            let mensaje = `✅ ${resultados.length} registros de ${rifa.nombre} | ${totalPagados} pagados, ${totalPromocion} promoción | ${totalBoletos} boletos totales | Total pagado: $${totalPagado.toFixed(2)}`;
+            if (invalidos > 0) mensaje += ` ⚠️ ${invalidos} con inconsistencia`;
             document.getElementById('boletosInfoAlert').textContent = mensaje;
             document.getElementById('boletosInfoAlert').style.display = 'block';
         }
-
     } catch (error) {
-        console.error('❌ [BOLETOS ERP] Error:', error);
+        console.error(`❌ [BOLETOS ERP] Error consultando ${rifa.nombre}:`, error);
         document.getElementById('boletosErrorAlert').textContent = `❌ Error: ${error.message}`;
         document.getElementById('boletosErrorAlert').style.display = 'block';
     } finally {
@@ -910,6 +1088,8 @@ function mostrarResultadosBoletosERP(resultados) {
         .filter(r => r.tipo === 'pagado')
         .reduce((sum, r) => sum + r.total, 0);
     const invalidos = resultados.filter(r => !r.esValido).length;
+    const rifaActual = resultados[0]?.rifa || obtenerRifaSeleccionada().nombre;
+    const precioBoletoActual = resultados[0]?.precioBoleto ?? obtenerRifaSeleccionada().precioBoleto;
     const boletosPagados = resultados
         .filter(r => r.tipo === 'pagado')
         .reduce((sum, r) => sum + r.cantidadBoletos, 0);
@@ -918,6 +1098,9 @@ function mostrarResultadosBoletosERP(resultados) {
         .reduce((sum, r) => sum + r.cantidadBoletos, 0);
 
     let html = `
+        <div style="margin-bottom:14px;padding:10px 14px;border-radius:10px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-weight:700;text-align:center;">
+            🎫 ${escapeHtml(rifaActual)} <span style="font-size:0.85rem;font-weight:600;">(Boleto: $${Number(precioBoletoActual).toFixed(2)})</span>
+        </div>
         <div class="stats" style="margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
             <!-- Tarjeta: Total Boletos (MÁS VISIBLE) -->
             <div class="stat-card" style="background:linear-gradient(135deg,#1e40af,#3b82f6);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(30,64,175,0.35);">
@@ -1621,8 +1804,10 @@ function cerrarBoletosResumenModal() {
 
 function exportBoletosERPToExcel() {
     const resultados = window._boletosERPData || currentResults;
+    const rifaActual = resultados?.[0]?.rifa || obtenerRifaSeleccionada().nombre;
+    const precioBoletoActual = resultados?.[0]?.precioBoleto ?? obtenerRifaSeleccionada().precioBoleto;
     
-    console.log('📊 [EXPORT] Iniciando exportación...');
+    console.log(`📊 [EXPORT] Iniciando exportación de ${rifaActual} ($${precioBoletoActual} por boleto)...`);
     console.log(`📊 [EXPORT] Total registros: ${resultados?.length || 0}`);
     
     if (!resultados || resultados.length === 0) {
@@ -1632,15 +1817,19 @@ function exportBoletosERPToExcel() {
 
     const excelData = [
         ['BOLETOS RIFA - VENTAS ERP'],
+        [`Rifa: ${rifaActual}`],
+        [`Precio por boleto: $${Number(precioBoletoActual).toFixed(2)}`],
         [`Fecha de consulta: ${new Date().toLocaleString()}`],
         [''],
-        ['Venta', 'Tipo', 'Boletos', 'Total Pagado', 'Sucursal', 'Vendedor', '# Celular', 'Boleto(s)', 'Fecha']
+        ['Venta', 'Rifa', 'Tipo', 'Precio Boleto', 'Boletos', 'Total Pagado', 'Sucursal', 'Vendedor', '# Celular', 'Boleto(s)', 'Fecha']
     ];
 
     resultados.forEach((item) => {
         excelData.push([
             item.folio || item.ventaId,
+            item.rifa || rifaActual,
             item.tipo === 'pagado' ? 'Pagado' : 'Promoción',
+            Number(item.precioBoleto ?? precioBoletoActual).toFixed(2),
             item.cantidadBoletos || 0,
             (item.total || 0).toFixed(2),
             item.sucursal,
@@ -1690,11 +1879,12 @@ function exportBoletosERPToExcel() {
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(excelData);
             ws['!cols'] = [
-                { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 14 },
+                { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 14 },
                 { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 22 }
             ];
             XLSX.utils.book_append_sheet(wb, ws, 'Boletos');
-            const fileName = `boletos_erp_${new Date().toISOString().split('T')[0]}.xlsx`;
+            const rifaArchivo = rifaActual.replace(/[^a-z0-9áéíóúñ]+/gi, '_').replace(/^_|_$/g, '');
+            const fileName = `boletos_erp_${rifaArchivo}_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(wb, fileName);
             alert(`✅ Exportado correctamente: ${fileName}`);
         } else {
@@ -1706,7 +1896,8 @@ function exportBoletosERPToExcel() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `boletos_erp_${new Date().toISOString().split('T')[0]}.csv`;
+            const rifaArchivo = rifaActual.replace(/[^a-z0-9áéíóúñ]+/gi, '_').replace(/^_|_$/g, '');
+            a.download = `boletos_erp_${rifaArchivo}_${new Date().toISOString().split('T')[0]}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1769,6 +1960,9 @@ function initBoletosERPModule() {
         document.body.insertAdjacentHTML('beforeend', buscadorModalHTML);
     }
 
+    // Crear el selector de rifa
+    crearSelectorRifas();
+
     // Configurar fechas
     const today = new Date();
     const tomorrow = new Date(today);
@@ -1785,6 +1979,10 @@ function initBoletosERPModule() {
     const endInput = document.getElementById('boletosEndDate');
     if (startInput) startInput.value = formatDateInput(today);
     if (endInput) endInput.value = formatDateInput(tomorrow);
+
+    rifaSeleccionadaId = 'tele';
+    const rifaSelect = document.getElementById('boletosRifaSelect');
+    if (rifaSelect) rifaSelect.value = rifaSeleccionadaId;
 
     currentResults = [];
     window._boletosERPData = null;
@@ -1820,6 +2018,8 @@ function initBoletosERPModule() {
 // ==================== EXPORTAR FUNCIONES GLOBALES ====================
 window.initBoletosERPModule = initBoletosERPModule;
 window.consultarBoletosERP = consultarBoletosERP;
+window.cambiarRifaBoletos = cambiarRifaBoletos;
+window.agregarFiltrosRifa = agregarFiltrosRifa;
 window.exportBoletosERPToExcel = exportBoletosERPToExcel;
 window.exportResumenBoletosToExcel = exportResumenBoletosToExcel;
 window.ordenarBoletos = ordenarBoletos;
