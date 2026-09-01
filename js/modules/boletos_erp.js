@@ -18,12 +18,12 @@ const RIFAS_CONFIG = Object.freeze({
         productoReferenciaId: BOLETOS_PRODUCT_REFERENCIA,
         servicioIds: [BOLETOS_PRODUCT_REFERENCIA]
     },
-    rifa1350: { id: 'rifa1350', nombre: 'Rifa Conkal', esTele: false, precioBoleto: 10, servicioIds: [1350] },
-    rifa1351: { id: 'rifa1351', nombre: 'Rifa Temax', esTele: false, precioBoleto: 10, servicioIds: [1351] },
-    rifa1352: { id: 'rifa1352', nombre: 'Rifa Morelos', esTele: false, precioBoleto: 10, servicioIds: [1352] },
-    rifa1353: { id: 'rifa1353', nombre: 'Rifa Tzucacab', esTele: false, precioBoleto: 10, servicioIds: [1353] },
-    rifa1354: { id: 'rifa1354', nombre: 'Rifa Baca', esTele: false, precioBoleto: 10, servicioIds: [1354] },
-    rifa1355: { id: 'rifa1355', nombre: 'Rifa Xocchel', esTele: false, precioBoleto: 10, servicioIds: [1355] }
+    rifa1350: { id: 'rifa1350', nombre: 'Rifa Conkal', esTele: false, precioBoleto: 5, servicioIds: [1350] },
+    rifa1351: { id: 'rifa1351', nombre: 'Rifa Temax', esTele: false, precioBoleto: 5, servicioIds: [1351] },
+    rifa1352: { id: 'rifa1352', nombre: 'Rifa Morelos', esTele: false, precioBoleto: 5, servicioIds: [1352] },
+    rifa1353: { id: 'rifa1353', nombre: 'Rifa Tzucacab', esTele: false, precioBoleto: 5, servicioIds: [1353] },
+    rifa1354: { id: 'rifa1354', nombre: 'Rifa Baca', esTele: false, precioBoleto: 5, servicioIds: [1354] },
+    rifa1355: { id: 'rifa1355', nombre: 'Rifa Xocchel', esTele: false, precioBoleto: 5, servicioIds: [1355] }
 });
 
 let rifaSeleccionadaId = 'tele';
