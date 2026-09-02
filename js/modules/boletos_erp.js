@@ -190,10 +190,10 @@ function abrirVerificacionEnNuevaPestana(telefono, boleto) {
     let label;
     
     if (boleto) {
-        url = `https://servicel.rfs.mx/evento-2/verificador?q=${boleto}`;
+        url = `https://servicel.rfs.mx/evento-11/verificador?q=${boleto}`;
         label = `Boleto #${boleto}`;
     } else if (telefono) {
-        url = `https://servicel.rfs.mx/evento-2/verificador?q=${telefono}`;
+        url = `https://servicel.rfs.mx/evento-11/verificador?q=${telefono}`;
         label = `Teléfono ${telefono}`;
     } else {
         alert('⚠️ No se encontró información para verificar');
