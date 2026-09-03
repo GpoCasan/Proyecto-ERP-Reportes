@@ -78,6 +78,7 @@
         </div>
     </div>
 
+
     <!-- MODAL PARA BUSCAR VENTA POR NÚMERO -->
     <div id="saleSearchModal" class="modal" style="display: none;">
         <div class="modal-content" style="max-width: 450px;">
@@ -113,6 +114,27 @@
             </div>
         </div>
 
+        <!-- BANNER DE RESUMEN GENERAL (solo visible para admin) -->
+        <div id="resumenGeneralBanner" class="saldo-tae-card" style="display: none; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); margin-bottom: 16px;">
+            <div style="display: flex; width: 100%; justify-content: space-around; align-items: center; flex-wrap: wrap; gap: 16px; padding: 8px 0;">
+                <div style="text-align: center; flex: 1; min-width: 120px;">
+                    <div style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.7);">Operaciones</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #60a5fa;" id="resumenTotalOperaciones">...</div>
+                </div>
+                <div style="text-align: center; flex: 1; min-width: 120px;">
+                    <div style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.7);">Monto Total</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #34d399;" id="resumenMontoTotal">...</div>
+                </div>
+                <div style="text-align: center; flex: 1; min-width: 120px;">
+                    <div style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.7);">Ticket Promedio</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #fbbf24;" id="resumenTicketPromedio">...</div>
+                </div>
+                <div style="text-align: center; flex: 0 1 auto; font-size: 0.7rem; color: rgba(255,255,255,0.5);">
+                    📅 <span id="resumenFechaDisplay">Cargando...</span>
+                </div>
+            </div>
+        </div>        
+
         <!-- NUEVA TARJETA: TIMBRES FISCALES (solo visible para admin) -->
         <div id="timbresCard" class="saldo-tae-card timbres-card" style="display: none;">
             <div class="saldo-tae-icon">📄</div>
@@ -136,6 +158,11 @@
             <div class="nav-card" data-module="accesorios">
                 <div class="card-icon">📱</div>
                 <div class="card-title">Accesorios</div>
+            </div>
+
+            <div class="nav-card" data-module="resumenGeneral" style="display: none;">
+                <div class="card-icon">📊</div>
+                <div class="card-title">Resumen Ejecutivo</div>
             </div>
 
             <div class="nav-card" data-module="simexpress">
@@ -1022,6 +1049,45 @@
                 </div>
             </div>
 
+            <!-- MÓDULO: RESUMEN EJECUTIVO -->
+            <div id="resumenGeneralModule" class="module" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📊 Resumen Ejecutivo</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="resumenErrorAlert" class="alert alert-error"></div>
+                        <div id="resumenInfoAlert" class="alert alert-info"></div>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; background: #f8fafc; padding: 20px; border-radius: 16px;">
+                            <div class="filter-group">
+                                <label style="display: block; font-size: 0.7rem; font-weight: 600; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">📅 Fecha Inicio</label>
+                                <input type="date" id="resumenStartDate" style="width: 100%; padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.85rem;">
+                            </div>
+                            <div class="filter-group">
+                                <label style="display: block; font-size: 0.7rem; font-weight: 600; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">📅 Fecha Fin</label>
+                                <input type="date" id="resumenEndDate" style="width: 100%; padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.85rem;">
+                            </div>
+                            <div class="filter-group">
+                                <label style="display: block; font-size: 0.7rem; font-weight: 600; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">📂 Tipo de Venta</label>
+                                <select id="resumenTipoSelect" style="width: 100%; padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.85rem;">
+                                    <option value="all">📊 Todos los tipos</option>
+                                    <option value="products">📱 Contado</option>
+                                    <option value="services">💰 Servicios</option>
+                                    <option value="credit">💳 Crédito</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <button id="consultarResumenBtn" class="btn-tae" style="width: 100%; padding: 12px; margin-bottom: 20px; background: linear-gradient(135deg, #1e293b 0%, #334155 100%);">
+                            🔍 Consultar Resumen
+                        </button>
+                        
+                        <div id="resumenResults" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+
         <!-- FOOTER -->
         <footer class="footer">
             <p>© Copyright - SADECO 2026</p>
@@ -1056,6 +1122,7 @@
     <script src="js/modules/inventarioAccesorios.js"></script>
     <script src="js/modules/boletos_erp.js"></script>
     <script src="js/modules/timbres_fiscales.js"></script>
+    <script src="js/modules/resumen_general.js"></script>
 
 </body>
 </html>

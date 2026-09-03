@@ -161,7 +161,10 @@ function initNavigation() {
             }
             if (moduleName === 'boletos_erp' && typeof initBoletosERPModule === 'function') {
                 setTimeout(initBoletosERPModule, 100);
-            }            
+            }    
+            if (moduleName === 'resumenGeneral' && typeof initResumenGeneralModule === 'function') {
+                setTimeout(initResumenGeneralModule, 100);
+            }               
         });
     });
 }
@@ -376,7 +379,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof initAlertasTransferencias === 'function') {
         initAlertasTransferencias();
     }
-    
+    // Inicializar módulo de resumen general si es necesario
+    if (typeof initResumenGeneralModule === 'function') {
+        setTimeout(initResumenGeneralModule, 100);
+    }
+
     // Configurar el botón de limpiar en inventario si existe
     const clearProductBtn = document.getElementById('clearProductBtn');
     if (clearProductBtn && typeof clearSelectedProduct === 'function') {

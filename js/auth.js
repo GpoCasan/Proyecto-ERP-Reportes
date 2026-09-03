@@ -6,7 +6,7 @@ const USERS = {
         password: "admin2026",
         role: "admin",
         name: "Administrador",
-        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "transferencias_pendientes", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas", "analisis_margen","tae_apps","inventarioAccesorios","boletos_erp"],
+        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "transferencias_pendientes", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas", "analisis_margen","tae_apps","inventarioAccesorios","boletos_erp","resumenGeneral"],
         showTaeBalance: true
     },
     "comercial": {
