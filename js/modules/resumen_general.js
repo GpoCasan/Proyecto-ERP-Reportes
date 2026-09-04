@@ -39,7 +39,6 @@
 
             const data = await response.json();
             
-            // Extraer total de transacciones y monto total
             const total = data.meta?.total || data.total || 0;
             const monto = parseFloat(data.total) || 0;
 
@@ -94,7 +93,6 @@
         const bannerElement = document.getElementById(RESUMEN_CARD_ID);
         if (!bannerElement) return;
 
-        // Mostrar estado de carga
         document.getElementById(RESUMEN_VALOR_TOTAL_ID).textContent = '...';
         document.getElementById(RESUMEN_VALOR_MONTO_ID).textContent = '...';
         document.getElementById(RESUMEN_VALOR_TICKET_ID).textContent = '...';
@@ -114,7 +112,6 @@
                 minimumFractionDigits: 2
             }).format(resumen.ticketPromedio);
 
-            // Actualizar la fecha en el banner
             const fechaElement = document.getElementById('resumenFechaDisplay');
             if (fechaElement) {
                 fechaElement.textContent = formatDate(resumen.fecha);
@@ -132,10 +129,6 @@
 
     /**
      * Obtiene el resumen para un período y tipo específico
-     * @param {string} startDate - Fecha inicio YYYY-MM-DD
-     * @param {string} endDate - Fecha fin YYYY-MM-DD
-     * @param {string} saleType - Tipo de venta ('products', 'services', 'credit', 'all')
-     * @returns {Promise<Object>} - { total, monto, ticketPromedio, porTipo }
      */
     async function obtenerResumenPeriodo(startDate, endDate, saleType) {
         try {
@@ -150,13 +143,6 @@
             console.log(`📊 [PERIODO] ${saleType} | ${startDateTime} → ${endDateTime}`);
 
             const tipos = ['products', 'services', 'credit'];
-            const tiposLabels = {
-                'products': '📱 Contado',
-                'services': '💰 Servicios',
-                'credit': '💳 Crédito'
-            };
-
-            // Si es 'all', consultar todos los tipos
             const tiposAConsultar = saleType === 'all' ? tipos : [saleType];
             
             const resultados = {};
@@ -187,7 +173,6 @@
 
             const ticketPromedioGeneral = totalGeneral > 0 ? (montoGeneral / totalGeneral) : 0;
 
-            // Calcular ticket promedio por tipo
             for (const tipo of tiposAConsultar) {
                 const data = resultados[tipo];
                 data.ticketPromedio = data.total > 0 ? (data.monto / data.total) : 0;
@@ -210,7 +195,7 @@
     }
 
     /**
-     * Renderiza las tarjetas de estadísticas para el resumen del período
+     * Renderiza las tarjetas de estadísticas
      */
     function renderizarTarjetasResumen(result, saleType) {
         const tipoLabels = {
@@ -219,7 +204,6 @@
             'credit': '💳 Crédito'
         };
 
-        // Colores por tipo
         const colores = {
             'products': { bg: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)', icon: '📱' },
             'services': { bg: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', icon: '💰' },
@@ -228,9 +212,7 @@
 
         let html = '';
 
-        // Si es 'all', mostrar tarjetas por tipo y generales
         if (saleType === 'all') {
-            // Tarjetas por tipo
             const tipos = ['products', 'services', 'credit'];
             for (const tipo of tipos) {
                 const data = result.porTipo[tipo] || { total: 0, monto: 0, ticketPromedio: 0 };
@@ -251,7 +233,6 @@
                 `;
             }
 
-            // Tarjetas generales
             html += `
                 <div class="stat-card" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%);">
                     <div class="stat-number" style="font-size: 1.8rem;">${result.totalGeneral.toLocaleString('es-MX')}</div>
@@ -268,7 +249,6 @@
             `;
 
         } else {
-            // Un solo tipo
             const data = result.porTipo[saleType] || { total: 0, monto: 0, ticketPromedio: 0 };
             const color = colores[saleType] || { bg: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)' };
             const label = tipoLabels[saleType] || saleType;
@@ -332,7 +312,6 @@
         try {
             const result = await obtenerResumenPeriodo(startDate, endDate, saleType);
 
-            // Obtener etiqueta del tipo seleccionado
             const tipoLabels = {
                 'all': 'Todos los tipos',
                 'products': 'Contado',
@@ -341,11 +320,15 @@
             };
             const tipoLabel = tipoLabels[saleType] || saleType;
 
-            // Renderizar tarjetas
             const tarjetasHtml = renderizarTarjetasResumen(result, saleType);
 
+            let gridColumns = 'repeat(3, 1fr)';
+            if (saleType === 'all') {
+                gridColumns = 'repeat(3, 1fr)';
+            }
+
             const html = `
-                <div style="display: grid; grid-template-columns: ${saleType === 'all' ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)'}; gap: 16px; margin-bottom: 16px;">
+                <div style="display: grid; grid-template-columns: ${gridColumns}; gap: 16px; margin-bottom: 16px;">
                     ${tarjetasHtml}
                 </div>
                 <div class="alert alert-info" style="margin-top: 8px;">
@@ -422,7 +405,6 @@
     function mostrarResumenSegunRol(user) {
         const banner = document.getElementById(RESUMEN_CARD_ID);
         const moduleNav = document.querySelector(`.nav-card[data-module="${RESUMEN_MODULE_ID}"]`);
-        const moduleContent = document.getElementById(RESUMEN_MODULE_ID);
 
         if (user && user.role === 'admin') {
             // Mostrar banner
@@ -431,22 +413,23 @@
                 // Actualizar datos automáticamente
                 actualizarBannerResumen();
             }
-            // Mostrar módulo en navegación
+            // Mostrar módulo en navegación (la tarjeta)
             if (moduleNav) {
                 moduleNav.style.display = 'block';
             }
-            if (moduleContent) {
-                moduleContent.style.display = 'block';
-            }
-            // Inicializar el módulo si está activo
-            if (moduleContent && moduleContent.classList.contains('active-module')) {
-                initResumenGeneralModule();
-            }
+            // NO tocar el display del contenido del módulo aquí
+            // Eso lo maneja switchModule cuando se hace clic en la tarjeta
         } else {
             // Ocultar todo para no administradores
             if (banner) banner.style.display = 'none';
             if (moduleNav) moduleNav.style.display = 'none';
-            if (moduleContent) moduleContent.style.display = 'none';
+            
+            // También ocultar el contenido del módulo si no es admin
+            const moduleContent = document.getElementById(RESUMEN_MODULE_ID);
+            if (moduleContent) {
+                moduleContent.style.display = 'none';
+                moduleContent.classList.remove('active-module');
+            }
         }
     }
 
@@ -494,7 +477,10 @@
                 const moduleNav = document.querySelector(`.nav-card[data-module="${RESUMEN_MODULE_ID}"]`);
                 if (moduleNav) moduleNav.style.display = 'none';
                 const moduleContent = document.getElementById(RESUMEN_MODULE_ID);
-                if (moduleContent) moduleContent.style.display = 'none';
+                if (moduleContent) {
+                    moduleContent.style.display = 'none';
+                    moduleContent.classList.remove('active-module');
+                }
             };
         }
 

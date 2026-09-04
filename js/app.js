@@ -379,10 +379,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof initAlertasTransferencias === 'function') {
         initAlertasTransferencias();
     }
-    // Inicializar módulo de resumen general si es necesario
-    if (typeof initResumenGeneralModule === 'function') {
-        setTimeout(initResumenGeneralModule, 100);
-    }
+    
+    // ELIMINA O COMENTA ESTA LÍNEA:
+    // if (typeof initResumenGeneralModule === 'function') {
+    //     setTimeout(initResumenGeneralModule, 100);
+    // }
 
     // Configurar el botón de limpiar en inventario si existe
     const clearProductBtn = document.getElementById('clearProductBtn');

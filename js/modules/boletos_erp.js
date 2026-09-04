@@ -82,12 +82,9 @@ function crearSelectorRifas() {
         select.setAttribute('aria-label', 'Seleccionar rifa');
     }
 
-    // El selector ocupa toda la columna izquierda y queda separado del botón.
     selectorWrapper.style.cssText = 'display:flex;flex-direction:column;gap:8px;width:100%;max-width:100%;min-width:0;margin:0 0 16px 0;align-self:stretch;order:initial;';
     select.style.cssText = 'width:100%;min-height:54px;padding:14px 16px;border:2px solid #e2e8f0;border-radius:8px;background:white;color:#1e293b;font-size:1.05rem;font-weight:700;cursor:pointer;outline:none;box-sizing:border-box;';
 
-    // Si el selector ya estaba en la columna derecha, se mueve dentro del bloque
-    // de Fecha Inicio, antes de su etiqueta y campo.
     const fechaInicio = document.getElementById('boletosStartDate');
     const bloqueFechaInicio = fechaInicio?.closest('.form-group, .date-group, .input-group') || fechaInicio?.parentElement;
 
@@ -136,7 +133,50 @@ function getDateRangeBoletos(startDateStr, endDateStr) {
     return { start: startStr, end: endStr };
 }
 
-// ==================== FUNCIÓN PARA EXTRAER Y SEPARAR TELÉFONO Y BOLETO ====================
+// ==================== FUNCIÓN MEJORADA PARA EXTRAER TELÉFONO Y BOLETO ====================
+
+function normalizarBoleto(numero) {
+    if (!numero) return null;
+    
+    // Convertir a string y limpiar
+    let numStr = String(numero).trim();
+    
+    // Si está vacío, retornar null
+    if (numStr === '') return null;
+    
+    // Si tiene 4 dígitos y empieza con 0, quitar el primer 0
+    if (numStr.length === 4 && numStr.startsWith('0')) {
+        numStr = numStr.substring(1);
+    }
+    
+    // Si tiene 4 dígitos y NO empieza con 0, tomar los últimos 3
+    if (numStr.length === 4 && !numStr.startsWith('0')) {
+        numStr = numStr.substring(1);
+    }
+    
+    // Si tiene 1 o 2 dígitos, rellenar con ceros a la izquierda hasta 3
+    if (numStr.length < 3 && numStr.length > 0) {
+        numStr = numStr.padStart(3, '0');
+    }
+    
+    // Si tiene más de 4 dígitos, tomar los últimos 3
+    if (numStr.length > 4) {
+        numStr = numStr.slice(-3);
+    }
+    
+    // Si después de todo sigue teniendo 4 dígitos (caso raro), tomar los últimos 3
+    if (numStr.length === 4) {
+        numStr = numStr.substring(1);
+    }
+    
+    // Validar que sea un número de 3 dígitos
+    if (numStr.length === 3 && /^\d{3}$/.test(numStr)) {
+        return numStr;
+    }
+    
+    // Si no se pudo normalizar, retornar null
+    return null;
+}
 
 function extraerTelefonoYBoleto(texto) {
     if (!texto || texto === 'N/A') return { telefono: null, boletos: [] };
@@ -144,31 +184,80 @@ function extraerTelefonoYBoleto(texto) {
     let telefono = null;
     let boletos = [];
     
+    // 1. BUSCAR TELÉFONO (10 dígitos)
     const telefonoMatch = texto.match(/\b\d{10}\b/);
     if (telefonoMatch) {
         telefono = telefonoMatch[0];
     }
     
-    const boletoMatches = texto.match(/\b\d{1,3}\b/g);
-    if (boletoMatches) {
-        boletos = boletoMatches
-            .filter(num => num.length <= 3 && num !== telefono)
-            .map(num => num.padStart(3, '0'));
-    }
+    // 2. BUSCAR BOLETOS - Buscar números de 1 a 4 dígitos (ahora incluye 1 y 2 dígitos)
+    const boletoMatches = texto.match(/\b\d{1,4}\b/g);
     
-    if (!telefono) {
-        const largoMatch = texto.match(/\d{10,}/);
-        if (largoMatch) {
-            telefono = largoMatch[0].substring(0, 10);
-            const resto = largoMatch[0].substring(10);
-            const restoBoletos = resto.match(/\d{1,3}/g);
-            if (restoBoletos) {
-                boletos = restoBoletos.map(num => num.padStart(3, '0'));
+    if (boletoMatches) {
+        for (let num of boletoMatches) {
+            // Si es el teléfono (10 dígitos), saltarlo
+            if (telefono && num === telefono) continue;
+            if (telefono && num.length === 10 && num === telefono) continue;
+            
+            // Normalizar el número (esto ahora maneja 1, 2, 3 y 4 dígitos)
+            const boletoNormalizado = normalizarBoleto(num);
+            if (boletoNormalizado) {
+                boletos.push(boletoNormalizado);
             }
         }
     }
     
-    return { telefono, boletos };
+    // Si no se encontró teléfono con el regex de 10 dígitos exactos,
+    // buscar números largos (más de 10 dígitos) que puedan contener teléfono + boleto
+    if (!telefono) {
+        const largoMatch = texto.match(/\d{10,}/);
+        if (largoMatch) {
+            const largoTexto = largoMatch[0];
+            // Intentar extraer teléfono (primeros 10 dígitos)
+            if (largoTexto.length >= 10) {
+                telefono = largoTexto.substring(0, 10);
+                // El resto pueden ser boletos
+                const resto = largoTexto.substring(10);
+                const restoBoletos = resto.match(/\d{1,4}/g);
+                if (restoBoletos) {
+                    for (let num of restoBoletos) {
+                        const boletoNormalizado = normalizarBoleto(num);
+                        if (boletoNormalizado) {
+                            boletos.push(boletoNormalizado);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Eliminar duplicados (manteniendo el orden)
+    const boletosUnicos = [];
+    const seen = new Set();
+    for (const boleto of boletos) {
+        if (!seen.has(boleto)) {
+            seen.add(boleto);
+            boletosUnicos.push(boleto);
+        }
+    }
+    
+    // Si no hay boletos pero hay un número de 1-4 dígitos que no es teléfono, usarlo como boleto
+    if (boletosUnicos.length === 0) {
+        const posiblesBoletos = texto.match(/\b\d{1,4}\b/);
+        if (posiblesBoletos) {
+            for (let posibleBoleto of posiblesBoletos) {
+                if (!telefono || posibleBoleto !== telefono) {
+                    const boletoNormalizado = normalizarBoleto(posibleBoleto);
+                    if (boletoNormalizado) {
+                        boletosUnicos.push(boletoNormalizado);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    return { telefono, boletos: boletosUnicos };
 }
 
 function extraerTelefono(texto) {
@@ -344,7 +433,6 @@ function abrirBuscadorBoletos() {
         return;
     }
     
-    // Limpiar el contenido del modal
     const body = document.getElementById('boletosBuscadorBody');
     if (body) {
         body.innerHTML = `
@@ -357,7 +445,7 @@ function abrirBuscadorBoletos() {
                         <input type="text" 
                                id="boletosBuscadorInput" 
                                placeholder="Ej: 005" 
-                               maxlength="3"
+                               maxlength="4"
                                style="
                                    flex: 1;
                                    padding: 10px 14px;
@@ -372,7 +460,7 @@ function abrirBuscadorBoletos() {
                                "
                                onfocus="this.style.borderColor='#3b82f6'"
                                onblur="this.style.borderColor='#e2e8f0'"
-                               oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 3)">
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 4)">
                         <button onclick="buscarBoletoModal()" style="
                             background: linear-gradient(135deg, #1e40af, #3b82f6);
                             color: white;
@@ -389,19 +477,19 @@ function abrirBuscadorBoletos() {
                             🔍 Buscar
                         </button>
                     </div>
+                    <small style="color: #64748b; display: block; margin-top: 6px;">💡 Puedes ingresar 3 o 4 dígitos (los de 4 dígitos se normalizarán automáticamente)</small>
                 </div>
                 <div id="boletosResultadoBusqueda" style="margin-top: 16px;">
                     <div style="text-align: center; color: #94a3b8; padding: 30px 0;">
                         <div style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
-                        <p>Ingresa el número de boleto de 3 dígitos</p>
-                        <p style="font-size: 0.8rem; margin-top: 8px;">Ejemplo: 001, 005, 123</p>
+                        <p>Ingresa el número de boleto (3 o 4 dígitos)</p>
+                        <p style="font-size: 0.8rem; margin-top: 8px;">Ejemplo: 005, 123, 0001, 0123</p>
                     </div>
                 </div>
             </div>
         `;
     }
     
-    // Configurar Enter en el input
     const input = document.getElementById('boletosBuscadorInput');
     if (input) {
         input.addEventListener('keypress', function(e) {
@@ -410,23 +498,20 @@ function abrirBuscadorBoletos() {
                 buscarBoletoModal();
             }
         });
-        // Enfocar automáticamente
         setTimeout(() => input.focus(), 100);
     }
     
-    // Limpiar resultado de búsqueda anterior
     const resultadoDiv = document.getElementById('boletosResultadoBusqueda');
     if (resultadoDiv) {
         resultadoDiv.innerHTML = `
             <div style="text-align: center; color: #94a3b8; padding: 30px 0;">
                 <div style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
-                <p>Ingresa el número de boleto de 3 dígitos</p>
-                <p style="font-size: 0.8rem; margin-top: 8px;">Ejemplo: 001, 005, 123</p>
+                <p>Ingresa el número de boleto (3 o 4 dígitos)</p>
+                <p style="font-size: 0.8rem; margin-top: 8px;">Ejemplo: 005, 123, 0001, 0123</p>
             </div>
         `;
     }
     
-    // Mostrar el modal
     modal.style.display = 'flex';
     document.getElementById('boletosBuscadorTitle').textContent = '🎫 Buscar Boleto';
 }
@@ -435,22 +520,32 @@ function buscarBoletoModal() {
     const input = document.getElementById('boletosBuscadorInput');
     if (!input) return;
     
-    const query = input.value.trim();
+    let query = input.value.trim();
     
-    // Validar que sean exactamente 3 dígitos
-    if (!query || query.length !== 3 || !/^\d{3}$/.test(query)) {
-        alert('⚠️ Debes ingresar exactamente 3 dígitos (001 al 999)');
+    // Si está vacío, mostrar error
+    if (!query) {
+        alert('⚠️ Por favor, ingresa un número de boleto');
+        input.focus();
+        return;
+    }
+    
+    // Normalizar el query usando la misma función
+    const queryNormalizado = normalizarBoleto(query);
+    
+    // Si no se pudo normalizar, mostrar error
+    if (!queryNormalizado) {
+        alert('⚠️ El número ingresado no es válido. Debe ser un número de 1 a 4 dígitos.');
         input.focus();
         input.select();
         return;
     }
     
-    console.log(`🔍 [BUSCADOR] Buscando boleto: ${query}`);
+    console.log(`🔍 [BUSCADOR] Buscando boleto: ${queryNormalizado} (original: ${query})`);
     
     const resultados = window._boletosERPData || currentResults;
     
     if (!resultados || resultados.length === 0) {
-        mostrarResultadoBusquedaModal(null, query, 'No hay ventas cargadas. Primero consulta ventas de boletos.');
+        mostrarResultadoBusquedaModal(null, queryNormalizado, 'No hay ventas cargadas. Primero consulta ventas de boletos.');
         return;
     }
     
@@ -459,17 +554,14 @@ function buscarBoletoModal() {
     
     resultados.forEach(item => {
         if (item.boletos && item.boletos.length > 0) {
-            // Buscar coincidencia exacta en el array de boletos
-            const encontrado = item.boletos.some(b => b === query);
+            const encontrado = item.boletos.some(b => b === queryNormalizado);
             if (encontrado) {
                 ventasEncontradas.push(item);
             }
         }
         
-        // También buscar en dato2 (string de boletos) con coincidencia exacta
         if (item.dato2) {
-            // Buscar el boleto como palabra completa (con bordes de palabra)
-            const regex = new RegExp(`\\b${query}\\b`);
+            const regex = new RegExp(`\\b${queryNormalizado}\\b`);
             if (regex.test(item.dato2)) {
                 if (!ventasEncontradas.includes(item)) {
                     ventasEncontradas.push(item);
@@ -479,14 +571,14 @@ function buscarBoletoModal() {
     });
     
     if (ventasEncontradas.length === 0) {
-        mostrarResultadoBusquedaModal(null, query, `❌ Boleto #${query} no encontrado en el rango consultado.`);
+        mostrarResultadoBusquedaModal(null, queryNormalizado, `❌ Boleto #${queryNormalizado} no encontrado en el rango consultado.`);
         return;
     }
     
     if (ventasEncontradas.length === 1) {
-        mostrarResultadoBusquedaModal(ventasEncontradas[0], query);
+        mostrarResultadoBusquedaModal(ventasEncontradas[0], queryNormalizado);
     } else {
-        mostrarResultadoBusquedaModal(ventasEncontradas, query);
+        mostrarResultadoBusquedaModal(ventasEncontradas, queryNormalizado);
     }
 }
 
@@ -494,7 +586,6 @@ function mostrarResultadoBusquedaModal(data, query, mensajeError = null) {
     const resultadoDiv = document.getElementById('boletosResultadoBusqueda');
     if (!resultadoDiv) return;
     
-    // Si hay error o no hay datos
     if (mensajeError || !data) {
         resultadoDiv.innerHTML = `
             <div style="text-align: center; padding: 20px; background: #fef2f2; border-radius: 10px; border: 1px solid #fecaca;">
@@ -517,7 +608,6 @@ function mostrarResultadoBusquedaModal(data, query, mensajeError = null) {
         return;
     }
     
-    // Si es un array (múltiples ventas)
     if (Array.isArray(data)) {
         let ventasHtml = '';
         data.forEach((item, index) => {
@@ -582,7 +672,6 @@ function mostrarResultadoBusquedaModal(data, query, mensajeError = null) {
         return;
     }
     
-    // Si es una sola venta (objeto)
     const item = data;
     const boletosStr = item.boletos && item.boletos.length > 0 ? item.boletos.join(', ') : 'N/A';
     const telefonoStr = item.telefono || 'N/A';
@@ -590,7 +679,6 @@ function mostrarResultadoBusquedaModal(data, query, mensajeError = null) {
     const fechaStr = new Date(item.fecha).toLocaleString();
     const esValidoStr = item.esValido ? '✅ Válido' : '⚠️ Inconsistencia';
     
-    // Generar HTML para los boletos clickeables
     let boletosClickeablesHtml = '';
     if (item.boletos && item.boletos.length > 0) {
         boletosClickeablesHtml = item.boletos.map(b => 
@@ -600,12 +688,10 @@ function mostrarResultadoBusquedaModal(data, query, mensajeError = null) {
         boletosClickeablesHtml = 'N/A';
     }
     
-    // Teléfono clickeable
     const telefonoClickeable = telefonoStr !== 'N/A' 
         ? `<a href="#" onclick="abrirVerificacionEnNuevaPestana('${telefonoStr}', null);return false;" style="color:#2563eb;text-decoration:underline;cursor:pointer;font-weight:bold;">${telefonoStr}</a>`
         : 'N/A';
     
-    // Folio clickeable
     const folioClickeable = `<a href="#" onclick="abrirVentaERP(${item.ventaId});return false;" style="color:#1e40af;text-decoration:underline;cursor:pointer;font-weight:bold;">#${item.folio}</a>`;
     
     resultadoDiv.innerHTML = `
@@ -681,8 +767,8 @@ function limpiarBuscadorBoletos() {
         resultadoDiv.innerHTML = `
             <div style="text-align: center; color: #94a3b8; padding: 30px 0;">
                 <div style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
-                <p>Ingresa el número de boleto de 3 dígitos</p>
-                <p style="font-size: 0.8rem; margin-top: 8px;">Ejemplo: 001, 005, 123</p>
+                <p>Ingresa el número de boleto (3 o 4 dígitos)</p>
+                <p style="font-size: 0.8rem; margin-top: 8px;">Ejemplo: 005, 123, 0001, 0123</p>
             </div>
         `;
     }
@@ -709,8 +795,6 @@ function agregarFiltrosRifa(url, rifa) {
             + `&service_ids[]=${rifa.servicioIds[0]}`;
     }
 
-    // Las rifas adicionales se consultan como servicios y requieren
-    // producto + servicio con el mismo ID, además de sale_type=services.
     const servicioId = rifa.servicioIds[0];
     return url
         + `&product_ids[]=${servicioId}`
@@ -727,8 +811,6 @@ async function obtenerTodasLasVentas(startFormatted, endFormatted, rifa = obtene
     console.log(`📡 [BOLETOS ERP] Obteniendo ventas de ${rifa.nombre}...`);
     
     do {
-        // Se conserva el formato manual de la versión original, porque el
-        // endpoint del ERP espera los corchetes y el signo + sin recodificar.
         let url = `${CONFIG.API_SALES_ENDPOINT}?page=${pagina}&per_page=${porPagina}&total=0`;
         url += `&start_date=${startFormatted}`;
         url += `&end_date=${endFormatted}`;
@@ -762,7 +844,7 @@ async function obtenerTodasLasVentas(startFormatted, endFormatted, rifa = obtene
     return todasLasVentas;
 }
 
-// ==================== FUNCIÓN PRINCIPAL (CONSULTAR VENTAS) ====================
+// ==================== FUNCIÓN PRINCIPAL MEJORADA ====================
 
 function obtenerValorDetalle(detail, keys) {
     for (const key of keys) {
@@ -837,6 +919,7 @@ async function consultarBoletosERP() {
             let tipo = null;
             let cantidadBoletos = 0;
             let boletosExtraidos = [];
+            let telefonoExtraido = null;
             let esValido = true;
             let mensajeValidacion = '';
             let totalPagadoProducto = 0;
@@ -884,19 +967,54 @@ async function consultarBoletosERP() {
 
             if (!tieneDatos) return;
 
+            // ========== PROCESAMIENTO MEJORADO PARA RIFA DE LA TELE ==========
             if (rifa.esTele) {
                 if (referencia1) {
                     tipo = 'pagado';
-                    const separado = extraerTelefonoYBoleto(referencia2 || '');
-                    boletosExtraidos = separado.boletos;
+                    
+                    // ====== NUEVA LÓGICA: VERIFICAR AMBAS REFERENCIAS ======
+                    const textoCompleto = (referencia1 || '') + ' ' + (referencia2 || '');
+                    
+                    const extraccion = extraerTelefonoYBoleto(textoCompleto);
+                    telefonoExtraido = extraccion.telefono;
+                    boletosExtraidos = extraccion.boletos;
+                    
+                    if (boletosExtraidos.length === 0 && referencia2) {
+                        const extraccion2 = extraerTelefonoYBoleto(referencia2);
+                        boletosExtraidos = extraccion2.boletos;
+                        if (!telefonoExtraido) telefonoExtraido = extraccion2.telefono;
+                    }
+                    
+                    if (boletosExtraidos.length === 0 && referencia1) {
+                        const extraccion1 = extraerTelefonoYBoleto(referencia1);
+                        boletosExtraidos = extraccion1.boletos;
+                        if (!telefonoExtraido) telefonoExtraido = extraccion1.telefono;
+                    }
+                    
                     cantidadBoletos = boletosExtraidos.length;
 
-                    // La validación se realiza después, usando el precio de la rifa.
-                    // La promoción no se valida porque no representa un cobro de boletos.
+                    const validacion = validarTotalBoletos(
+                        totalPagadoProducto,
+                        cantidadBoletos,
+                        rifa.precioBoleto,
+                        sale.id
+                    );
+                    esValido = validacion.esValido;
+                    mensajeValidacion = validacion.mensaje;
+                    
                 } else if (nota1) {
                     tipo = 'promocion';
-                    const separado = extraerTelefonoYBoleto(nota1_2 || '');
-                    boletosExtraidos = separado.boletos;
+                    
+                    const extraccion = extraerTelefonoYBoleto(nota1_2 || '');
+                    boletosExtraidos = extraccion.boletos;
+                    telefonoExtraido = extraccion.telefono;
+                    
+                    if (boletosExtraidos.length === 0 && nota1) {
+                        const extraccionNota1 = extraerTelefonoYBoleto(nota1);
+                        boletosExtraidos = extraccionNota1.boletos;
+                        if (!telefonoExtraido) telefonoExtraido = extraccionNota1.telefono;
+                    }
+                    
                     cantidadBoletos = boletosExtraidos.length > 0 ? boletosExtraidos.length : 1;
                 }
             } else {
@@ -904,6 +1022,7 @@ async function consultarBoletosERP() {
                 const separado1 = extraerTelefonoYBoleto(referencia1 || '');
                 const separado2 = extraerTelefonoYBoleto(referencia2 || '');
                 boletosExtraidos = separado2.boletos.length > 0 ? separado2.boletos : separado1.boletos;
+                telefonoExtraido = separado2.telefono || separado1.telefono;
                 cantidadBoletos = boletosExtraidos.length;
 
                 const cantidadDetalle = Number(detalleServicioRifa?.quantity ?? detalleServicioRifa?.qty ?? 0);
@@ -913,23 +1032,18 @@ async function consultarBoletosERP() {
             }
 
             const dato1Original = tipo === 'pagado' ? referencia1 : nota1;
-            if (tipo === 'pagado') {
-                const validacion = validarTotalBoletos(
-                    totalPagadoProducto,
-                    cantidadBoletos,
-                    rifa.precioBoleto,
-                    sale.id
-                );
-                esValido = validacion.esValido;
-                mensajeValidacion = validacion.mensaje;
-            }
-
             const dato2Original = tipo === 'pagado' ? referencia2 : nota1_2;
-            const dato1Separado = extraerTelefonoYBoleto(dato1Original || '');
-            const dato2Separado = extraerTelefonoYBoleto(dato2Original || '');
-            let boletos2 = dato2Separado.boletos;
-            if (boletos2.length === 0 && boletosExtraidos.length > 0) boletos2 = boletosExtraidos;
-            if (boletos2.length === 0 && dato1Separado.boletos.length > 0) boletos2 = dato1Separado.boletos;
+            
+            const telefono = telefonoExtraido || extraerTelefonoYBoleto(dato1Original || '').telefono;
+            const boletos = boletosExtraidos;
+
+            if (boletos.length === 0) {
+                const textoCompleto = (dato1Original || '') + ' ' + (dato2Original || '');
+                const extraccionFinal = extraerTelefonoYBoleto(textoCompleto);
+                if (extraccionFinal.boletos.length > 0) {
+                    boletos.push(...extraccionFinal.boletos);
+                }
+            }
 
             resultados.push({
                 ventaId: sale.id,
@@ -944,12 +1058,12 @@ async function consultarBoletosERP() {
                 total: totalPagadoProducto,
                 tipo,
                 cantidadBoletos,
-                dato1: dato1Separado.telefono || dato1Original || 'N/A',
-                dato2: boletos2.length > 0 ? boletos2.join(', ') : dato2Original || 'N/A',
+                dato1: telefono || dato1Original || 'N/A',
+                dato2: boletos.length > 0 ? boletos.join(', ') : dato2Original || 'N/A',
                 _dato1Original: dato1Original,
                 _dato2Original: dato2Original,
-                telefono: dato1Separado.telefono,
-                boletos: boletos2,
+                telefono: telefono,
+                boletos: boletos,
                 tieneDato: !!dato1Original || !!dato2Original,
                 esValido,
                 mensajeValidacion
@@ -1065,11 +1179,9 @@ function mostrarResultadosBoletosERP(resultados) {
         return;
     }
 
-    // Calcular paginación
     const totalRegistros = resultados.length;
     const totalPaginas = Math.ceil(totalRegistros / pageSize);
     
-    // Asegurar que currentPage no exceda el total
     if (currentPage > totalPaginas) {
         currentPage = totalPaginas;
     }
@@ -1102,35 +1214,30 @@ function mostrarResultadosBoletosERP(resultados) {
             🎫 ${escapeHtml(rifaActual)} <span style="font-size:0.85rem;font-weight:600;">(Boleto: $${Number(precioBoletoActual).toFixed(2)})</span>
         </div>
         <div class="stats" style="margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
-            <!-- Tarjeta: Total Boletos (MÁS VISIBLE) -->
             <div class="stat-card" style="background:linear-gradient(135deg,#1e40af,#3b82f6);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(30,64,175,0.35);">
                 <div class="stat-number" style="font-size:2.4rem;font-weight:800;line-height:1.2;">${totalBoletos}</div>
                 <div class="stat-label" style="font-size:0.8rem;opacity:0.9;margin-top:2px;font-weight:600;">🎫 Total Boletos</div>
                 <div style="font-size:0.65rem;opacity:0.7;margin-top:3px;">📊 ${resultados.length} ventas</div>
             </div>
             
-            <!-- Tarjeta: Boletos Pagados -->
             <div class="stat-card" style="background:linear-gradient(135deg,#059669,#10b981);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(5,150,105,0.3);">
                 <div class="stat-number" style="font-size:1.8rem;font-weight:700;line-height:1.2;">${boletosPagados}</div>
                 <div class="stat-label" style="font-size:0.8rem;opacity:0.9;margin-top:2px;font-weight:600;">💰 Pagados</div>
                 <div style="font-size:0.65rem;opacity:0.7;margin-top:3px;">📊 ${totalPagados} ventas</div>
             </div>
             
-            <!-- Tarjeta: Boletos Promoción -->
             <div class="stat-card" style="background:linear-gradient(135deg,#f97316,#ea580c);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(249,115,22,0.3);">
                 <div class="stat-number" style="font-size:1.8rem;font-weight:700;line-height:1.2;">${boletosPromocion}</div>
                 <div class="stat-label" style="font-size:0.8rem;opacity:0.9;margin-top:2px;font-weight:600;">🎁 Promoción</div>
                 <div style="font-size:0.65rem;opacity:0.7;margin-top:3px;">📊 ${totalPromocion} ventas</div>
             </div>
             
-            <!-- Tarjeta: Total Pagado -->
             <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(245,158,11,0.3);">
                 <div class="stat-number" style="font-size:1.6rem;font-weight:700;line-height:1.2;">$${totalPagado.toFixed(2)}</div>
                 <div class="stat-label" style="font-size:0.8rem;opacity:0.9;margin-top:2px;font-weight:600;">💰 Total Cobrado</div>
                 <div style="font-size:0.65rem;opacity:0.7;margin-top:3px;">🎫 ${boletosPagados} boletos</div>
             </div>
             
-            <!-- Tarjeta: Inconsistencias (solo si hay) -->
             ${invalidos > 0 ? `
             <div class="stat-card" style="background:linear-gradient(135deg,#dc2626,#ef4444);padding:18px 16px;border-radius:14px;color:white;text-align:center;box-shadow:0 4px 15px rgba(220,38,38,0.3);">
                 <div class="stat-number" style="font-size:1.6rem;font-weight:700;line-height:1.2;">${invalidos}</div>
@@ -1208,16 +1315,13 @@ function mostrarResultadosBoletosERP(resultados) {
         const mostrarDato1 = item.dato1 && item.dato1 !== 'N/A' ? formatearDato(item.dato1) : '—';
         const mostrarDato2 = item.dato2 && item.dato2 !== 'N/A' ? formatearDato(item.dato2) : '—';
         
-        // Folio clickeable - abre la venta
         const folioHtml = `<a href="#" onclick="abrirVentaERP(${item.ventaId});return false;" style="color:#1e40af;text-decoration:underline;cursor:pointer;font-weight:600;">📄 #${item.folio}${!item.esValido ? ' ⚠️' : ''}</a>`;
         
-        // Teléfono clickeable - abre verificador por teléfono
         const esClickeable1 = telefono !== null && telefono !== undefined;
         const dato1Html = esClickeable1
             ? `<a href="#" onclick="abrirVerificacionEnNuevaPestana('${telefono}', null);return false;" style="color:#2563eb;text-decoration:underline;cursor:pointer;font-weight:500;">${mostrarDato1}</a>`
             : mostrarDato1;
         
-        // Boletos clickeables - cada uno abre el verificador
         let dato2Html = '';
         if (boletos.length > 0) {
             if (boletos.length === 1) {
@@ -1268,7 +1372,6 @@ function mostrarResultadosBoletosERP(resultados) {
         </div>
     `;
 
-    // ==================== PAGINACIÓN ====================
     html += `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px 0;gap:12px;flex-wrap:wrap;border-top:1px solid #e2e8f0;margin-top:12px;">
             <div style="display:flex;align-items:center;gap:8px;font-size:0.8rem;color:#64748b;">
@@ -1350,7 +1453,6 @@ function openResumenBoletosModal() {
         return;
     }
 
-    // ========== 1. AGRUPAR DATOS POR RUTA -> ASESOR ==========
     const rutasMap = new Map();
 
     resultados.forEach(item => {
@@ -1426,10 +1528,8 @@ function openResumenBoletosModal() {
         ruta.totalRegistros++;
     });
 
-    // Guardar datos globalmente para exportación
     window._boletosResumenData = rutasMap;
 
-    // ========== 2. CREAR MODAL ==========
     let modal = document.getElementById('boletosResumenModal');
     if (modal) {
         modal.remove();
@@ -1445,7 +1545,6 @@ function openResumenBoletosModal() {
         z-index: 10002;
     `;
 
-    // ========== 3. GENERAR PESTAÑAS POR RUTA ==========
     const rutasOrdenadas = Array.from(rutasMap.values())
         .sort((a, b) => {
             const orden = ['Ruta 1', 'Ruta 2', 'Ruta 3', 'Ruta 4', 'Sin Ruta'];
@@ -1495,7 +1594,6 @@ function openResumenBoletosModal() {
             </button>
         `;
 
-        // ========== 4. GENERAR TABLA PLANA: ASESOR | TIENDA | PROMO | PAGADOS | TOTAL ==========
         const asesoresArray = Array.from(ruta.asesores.values())
             .sort((a, b) => b.totalBoletos - a.totalBoletos);
 
@@ -1591,7 +1689,6 @@ function openResumenBoletosModal() {
         primera = false;
     });
 
-    // ========== 5. CONTENIDO COMPLETO DEL MODAL ==========
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 950px; animation: modalFadeIn 0.3s ease-out;">
             <div class="modal-header" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);">
@@ -1634,7 +1731,6 @@ function openResumenBoletosModal() {
 
     document.body.appendChild(modal);
 
-    // ========== 6. EVENTOS DE PESTAÑAS ==========
     document.querySelectorAll('.boletos-ruta-tab').forEach(tab => {
         tab.addEventListener('click', function() {
             const ruta = this.dataset.ruta;
@@ -1659,7 +1755,6 @@ function openResumenBoletosModal() {
         });
     });
 
-    // Cerrar al hacer clic fuera
     modal.addEventListener('click', function(e) {
         if (e.target === modal) {
             cerrarBoletosResumenModal();
@@ -1676,7 +1771,6 @@ function exportResumenBoletosToExcel() {
         return;
     }
 
-    // Construir filas para Excel
     const rows = [
         ['RESUMEN DE BOLETOS POR RUTA'],
         [`Fecha de consulta: ${new Date().toLocaleString()}`],
@@ -1689,7 +1783,6 @@ function exportResumenBoletosToExcel() {
     let totalGeneralBoletos = 0;
     let totalGeneralCobrado = 0;
 
-    // Ordenar rutas (Ruta 1, Ruta 2, Ruta 3, Ruta 4, Sin Ruta)
     const orden = ['Ruta 1', 'Ruta 2', 'Ruta 3', 'Ruta 4', 'Sin Ruta'];
     const rutasOrdenadas = Array.from(rutasMap.values())
         .sort((a, b) => orden.indexOf(a.nombre) - orden.indexOf(b.nombre));
@@ -1707,7 +1800,7 @@ function exportResumenBoletosToExcel() {
             const promo = item.boletosPromo || 0;
             const pagados = item.boletosPagados || 0;
             const totalBoletos = item.totalBoletos || 0;
-            const totalCobrado = item.totalPagadoPagados || 0; // solo pagados
+            const totalCobrado = item.totalPagadoPagados || 0;
 
             rows.push([
                 ruta.nombre,
@@ -1725,7 +1818,6 @@ function exportResumenBoletosToExcel() {
             subtotalCobrado += totalCobrado;
         });
 
-        // Subtotales por ruta
         rows.push([
             `SUBTOTAL ${ruta.nombre}`,
             '',
@@ -1735,7 +1827,7 @@ function exportResumenBoletosToExcel() {
             subtotalBoletos,
             subtotalCobrado.toFixed(2)
         ]);
-        rows.push([]); // línea en blanco
+        rows.push([]);
 
         totalGeneralPromo += subtotalPromo;
         totalGeneralPagados += subtotalPagados;
@@ -1743,29 +1835,26 @@ function exportResumenBoletosToExcel() {
         totalGeneralCobrado += subtotalCobrado;
     });
 
-    // Total general
     rows.push(['TOTAL GENERAL', '', '', totalGeneralPromo, totalGeneralPagados, totalGeneralBoletos, totalGeneralCobrado.toFixed(2)]);
 
-    // Generar archivo
     try {
         if (typeof XLSX !== 'undefined') {
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(rows);
             ws['!cols'] = [
-                { wch: 18 }, // RUTA
-                { wch: 20 }, // TIENDA
-                { wch: 22 }, // ASESOR
-                { wch: 12 }, // PROMOCION
-                { wch: 12 }, // PAGADOS
-                { wch: 16 }, // TOTAL BOLETOS
-                { wch: 16 }  // TOTAL COBRADO
+                { wch: 18 },
+                { wch: 20 },
+                { wch: 22 },
+                { wch: 12 },
+                { wch: 12 },
+                { wch: 16 },
+                { wch: 16 }
             ];
             XLSX.utils.book_append_sheet(wb, ws, 'Resumen');
             const fileName = `resumen_boletos_ruta_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(wb, fileName);
             alert(`✅ Exportado correctamente: ${fileName}`);
         } else {
-            // Fallback a CSV
             let csv = '\uFEFF';
             rows.forEach(row => {
                 csv += row.join(',') + '\n';
@@ -1853,12 +1942,9 @@ function exportBoletosERPToExcel() {
         .reduce((sum, r) => sum + (r.cantidadBoletos || 0), 0);
     
     const totalBoletos = boletosPagados + boletosPromocion;
-    
-    // SOLO boletos pagados (NO promoción)
     const totalPagadoGeneral = resultados
         .filter(r => r.tipo === 'pagado')
         .reduce((sum, r) => sum + r.total, 0);
-    
     const invalidos = resultados.filter(r => !r.esValido).length;
 
     excelData.push([]);
@@ -1915,7 +2001,6 @@ function exportBoletosERPToExcel() {
 function initBoletosERPModule() {
     console.log('🔄 [BOLETOS ERP] Inicializando módulo...');
 
-    // Crear modal de verificación si no existe
     if (!document.getElementById('boletosVerificacionModal')) {
         const modalHTML = `
             <div id="boletosVerificacionModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10001;justify-content:center;align-items:center;overflow-y:auto;padding:20px;">
@@ -1939,7 +2024,6 @@ function initBoletosERPModule() {
         document.body.insertAdjacentHTML('beforeend', modalHTML);
     }
 
-    // Crear modal de buscador de boletos si no existe
     if (!document.getElementById('boletosBuscadorModal')) {
         const buscadorModalHTML = `
             <div id="boletosBuscadorModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;justify-content:center;align-items:center;overflow-y:auto;padding:20px;">
@@ -1960,10 +2044,8 @@ function initBoletosERPModule() {
         document.body.insertAdjacentHTML('beforeend', buscadorModalHTML);
     }
 
-    // Crear el selector de rifa
     crearSelectorRifas();
 
-    // Configurar fechas
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -1991,7 +2073,6 @@ function initBoletosERPModule() {
     currentPage = 1;
     pageSize = 25;
 
-    // Configurar botón de consulta
     const btn = document.getElementById('consultarBoletosBtn');
     if (btn) {
         const newBtn = btn.cloneNode(true);
@@ -2000,7 +2081,6 @@ function initBoletosERPModule() {
         console.log('✅ [BOLETOS ERP] Botón configurado');
     }
 
-    // Cerrar modales al hacer clic fuera
     document.addEventListener('click', function(e) {
         const modalVerificacion = document.getElementById('boletosVerificacionModal');
         if (modalVerificacion && e.target === modalVerificacion) {
@@ -2039,5 +2119,6 @@ window.cerrarBoletosResumenModal = cerrarBoletosResumenModal;
 window.extraerTelefono = extraerTelefono;
 window.extraerNumerosBoleto = extraerNumerosBoleto;
 window.extraerTelefonoYBoleto = extraerTelefonoYBoleto;
+window.normalizarBoleto = normalizarBoleto;
 
 console.log('✅ Módulo BOLETOS ERP cargado correctamente');
