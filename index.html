@@ -196,6 +196,11 @@
                 <div class="card-title">Inventario Equipos</div>
             </div>
 
+            <div class="nav-card" data-module="inventarioSucursal">
+                <div class="card-icon">🏪</div>
+                <div class="card-title">Inventario Sucursal</div>
+            </div>
+
             <div class="nav-card" data-module="tae">
                 <div class="card-icon">📊</div>
                 <div class="card-title">TAE</div>
@@ -316,6 +321,29 @@
                     </button>
                     
                     <div id="inventarioAccesoriosResults" style="display: none; margin-top: 20px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="inventarioSucursalModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>🏪 Inventario por Sucursal</h2></div>
+                <div class="card-body">
+                    <div id="inventarioSucursalErrorAlert" class="alert alert-error"></div>
+                    <div id="inventarioSucursalInfoAlert" class="alert alert-info"></div>
+
+                    <div class="transfer-filter-group" style="margin-bottom: 20px;">
+                        <label>🏢 SUCURSAL</label>
+                        <select id="inventarioSucursalSelect">
+                            <option value="">Cargando sucursales...</option>
+                        </select>
+                    </div>
+
+                    <button id="searchInventarioSucursalBtn" class="btn-contado" style="width: 100%; padding: 12px; margin-bottom: 20px;">
+                        🔍 Consultar Inventario (Equipos + Servicios)
+                    </button>
+
+                    <div id="inventarioSucursalResults" style="display: none;"></div>
                 </div>
             </div>
         </div>
@@ -1123,6 +1151,8 @@
     <script src="js/modules/boletos_erp.js"></script>
     <script src="js/modules/timbres_fiscales.js"></script>
     <script src="js/modules/resumen_general.js"></script>
+    <script src="js/modules/inventario_sucursal.js"></script>
+
 
 </body>
 </html>

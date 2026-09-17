@@ -162,6 +162,11 @@ function initNavigation() {
             if (moduleName === 'boletos_erp' && typeof initBoletosERPModule === 'function') {
                 setTimeout(initBoletosERPModule, 100);
             }    
+
+            if (moduleName === 'inventarioSucursal' && typeof initInventarioSucursalModule === 'function') {
+                setTimeout(initInventarioSucursalModule, 100);
+            }
+
             if (moduleName === 'resumenGeneral' && typeof initResumenGeneralModule === 'function') {
                 setTimeout(initResumenGeneralModule, 100);
             }               
@@ -339,6 +344,48 @@ function setupTaeInventarioButton() {
     }
 }
 
+// ==================== INICIALIZAR INVENTARIO SUCURSAL EN AUTOMÁTICO ====================
+// Espera a que el usuario esté logueado y las sucursales de transferencias estén cargadas
+function initInventarioSucursalAutomatico() {
+    if (window._inventarioSucursalIniciado) {
+        console.log('⏳ [APP] Inventario Sucursal ya iniciado');
+        return;
+    }
+    
+    console.log('🚀 [APP] Esperando login para inicializar Inventario Sucursal...');
+    
+    let intentos = 0;
+    const maxIntentos = 30; // 30 * 1s = 30 segundos máximo
+    
+    const checkLogin = setInterval(() => {
+        intentos++;
+        const userBar = document.getElementById('userInfoBar');
+        const isLoggedIn = userBar && userBar.style.display !== 'none';
+        
+        if (isLoggedIn) {
+            clearInterval(checkLogin);
+            window._inventarioSucursalIniciado = true;
+            
+            console.log('🔐 [APP] Usuario autenticado. Iniciando Inventario Sucursal...');
+            
+            // Dar tiempo a que loadBranches() de transferencias termine (5s)
+            setTimeout(() => {
+                if (typeof initInventarioSucursalModule === 'function') {
+                    console.log('🚀 [APP] Llamando initInventarioSucursalModule()...');
+                    initInventarioSucursalModule();
+                } else {
+                    console.warn('⚠️ [APP] initInventarioSucursalModule no está disponible');
+                }
+            }, 5000);
+        }
+        
+        if (intentos >= maxIntentos) {
+            clearInterval(checkLogin);
+            console.warn('⚠️ [APP] Timeout esperando login para Inventario Sucursal');
+        }
+    }, 1000);
+}
+
 // Ejecutar inicialización después de que el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializar autenticación primero
@@ -379,11 +426,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof initAlertasTransferencias === 'function') {
         initAlertasTransferencias();
     }
-    
-    // ELIMINA O COMENTA ESTA LÍNEA:
-    // if (typeof initResumenGeneralModule === 'function') {
-    //     setTimeout(initResumenGeneralModule, 100);
-    // }
+
+    // 🔥 NUEVO: Inicializar Inventario Sucursal en automático (cuando el usuario haga login)
+    initInventarioSucursalAutomatico();
 
     // Configurar el botón de limpiar en inventario si existe
     const clearProductBtn = document.getElementById('clearProductBtn');

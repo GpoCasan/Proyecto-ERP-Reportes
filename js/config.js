@@ -18,6 +18,8 @@ const CONFIG = {
     API_SALES_ENDPOINT: 'https://sales.gcasan.com/api/sales',
     API_STOCK_HISTORY: 'https://inventory.gcasan.com/api/stock/history',
     API_STOCK: 'https://inventory.gcasan.com/api/stock',
+    API_PRODUCT_CLASSIFICATIONS: 'https://catalogs.gcasan.com/api/product-classifications',
+
     
     // TAE IDs
     TAE_APPS_IDS: [452,453,454,455,456,457,458,459,461,460,938,940,939,926,943,937,925,942,944,927,945,930,933,946,936,932,947,948,1237,934,935,941,928,929,931],

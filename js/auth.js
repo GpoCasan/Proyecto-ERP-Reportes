@@ -6,7 +6,7 @@ const USERS = {
         password: "admin2026",
         role: "admin",
         name: "Administrador",
-        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "transferencias_pendientes", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas", "analisis_margen","tae_apps","inventarioAccesorios","boletos_erp","resumenGeneral"],
+        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "transferencias_pendientes", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas", "analisis_margen","tae_apps","inventarioAccesorios","boletos_erp","resumenGeneral","inventarioSucursal"],
         showTaeBalance: true
     },
     "comercial": {
@@ -20,7 +20,7 @@ const USERS = {
         password: "ops2026",
         role: "operaciones",
         name: "Operaciones",
-        modules: ["contado", "inventario", "existencias", "transferencias", "compras","inventarioAccesorios", "facturas"],
+        modules: ["contado", "inventario", "existencias", "transferencias", "compras","inventarioAccesorios", "facturas","inventarioSucursal"],
         showTaeBalance: false
     },
     "ingresos": {
