@@ -10,7 +10,7 @@ const SERVIPREMIA_CONFIG = {
     // Cambia este dominio por el deployment real de Vercel.
     // También puede definirse antes de cargar este archivo con:
     // window.SERVIPREMIA_PROXY_URL = 'https://tu-proyecto.vercel.app/api/rewardix';
-    PROXY_URL: window.SERVIPREMIA_PROXY_URL || 'https://TU-PROYECTO.vercel.app/api/rewardix',
+    PROXY_URL: window.SERVIPREMIA_PROXY_URL || 'https://https://proyecto-erp-reportes-8t2bqrds9-gpo-casan.vercel.app/api/rewardix',
     TIPOS_PUNTOS: {
         'points earned':   { label: '⭐ Puntos Ganados',   color: '#059669', icon: '⭐' },
         'points redeemed': { label: '🎁 Puntos Canjeados', color: '#f97316', icon: '🎁' }
