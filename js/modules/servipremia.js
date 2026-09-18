@@ -7,9 +7,10 @@ let servipremiaInicializado = false;
 
 // ==================== CONFIGURACIÓN ====================
 const SERVIPREMIA_CONFIG = {
-    BASE_URL: 'https://api-pymes.rewardix.com/api/v2',
-    API_KEY: '95135d6e412043bf0c8f3576a5763d7d',
-    LOCAL_PROXY: '/api/rewardix/api/v2',
+    // Cambia este dominio por el deployment real de Vercel.
+    // También puede definirse antes de cargar este archivo con:
+    // window.SERVIPREMIA_PROXY_URL = 'https://tu-proyecto.vercel.app/api/rewardix';
+    PROXY_URL: window.SERVIPREMIA_PROXY_URL || 'https://TU-PROYECTO.vercel.app/api/rewardix',
     TIPOS_PUNTOS: {
         'points earned':   { label: '⭐ Puntos Ganados',   color: '#059669', icon: '⭐' },
         'points redeemed': { label: '🎁 Puntos Canjeados', color: '#f97316', icon: '🎁' }
@@ -25,11 +26,7 @@ function servipremiaFormatDateInput(date) {
 }
 
 function getRewardixUrl() {
-    // En file:// no hay proxy, vamos directo a Rewardix
-    if (window.location.protocol === 'file:') {
-        return SERVIPREMIA_CONFIG.BASE_URL;
-    }
-    return `${window.location.origin}${SERVIPREMIA_CONFIG.LOCAL_PROXY}`;
+    return SERVIPREMIA_CONFIG.PROXY_URL;
 }
 
 // ==================== INICIALIZACIÓN ====================
@@ -228,9 +225,7 @@ async function fetchRewardixOperations(startDate, endDate) {
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
-                    'Accept': 'application/json',
-                    'X-API-Key': SERVIPREMIA_CONFIG.API_KEY,
-                    'X-Rewardix-Base': SERVIPREMIA_CONFIG.BASE_URL
+                    'Accept': 'application/json'
                 },
                 cache: 'no-store'
             });
@@ -276,9 +271,7 @@ async function fetchRewardixManagers() {
         const response = await fetch(url, {
             method: 'GET',
             headers: {
-                'Accept': 'application/json',
-                'X-API-Key': SERVIPREMIA_CONFIG.API_KEY,
-                'X-Rewardix-Base': SERVIPREMIA_CONFIG.BASE_URL
+                'Accept': 'application/json'
             },
             cache: 'no-store'
         });
