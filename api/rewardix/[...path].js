@@ -38,14 +38,37 @@ function setCorsHeaders(req, res) {
 }
 
 function getResourcePath(req) {
-  const path = req.query?.path;
-  const parts = Array.isArray(path) ? path : [path];
+  const queryPath = req.query?.path;
+  const queryParts = Array.isArray(queryPath)
+    ? queryPath
+    : [queryPath];
 
-  if (parts.length !== 1 || !parts[0]) {
-    return null;
+  const queryResource = queryParts
+    .filter(Boolean)
+    .map(String)
+    .pop();
+
+  if (queryResource && ALLOWED_RESOURCES.has(queryResource)) {
+    return queryResource;
   }
 
-  return String(parts[0]);
+  // Fallback para distintas versiones del enrutador de Vercel.
+  // En algunos despliegues el parámetro catch-all no llega en req.query.
+  const requestUrl = new URL(req.url || '/', 'https://vercel.local');
+  const marker = '/api/rewardix/';
+  const markerIndex = requestUrl.pathname.indexOf(marker);
+
+  if (markerIndex !== -1) {
+    const resource = requestUrl.pathname
+      .slice(markerIndex + marker.length)
+      .split('/')[0];
+
+    if (ALLOWED_RESOURCES.has(resource)) {
+      return resource;
+    }
+  }
+
+  return null;
 }
 
 function buildRewardixUrl(resource, query) {
