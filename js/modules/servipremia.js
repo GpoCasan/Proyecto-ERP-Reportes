@@ -10,7 +10,7 @@ const SERVIPREMIA_CONFIG = {
     // Cambia este dominio por el deployment real de Vercel.
     // También puede definirse antes de cargar este archivo con:
     // window.SERVIPREMIA_PROXY_URL = 'https://tu-proyecto.vercel.app/api/rewardix';
-    PROXY_URL: window.SERVIPREMIA_PROXY_URL || 'https://proyecto-erp-reportes-gamma.vercel.app/api/rewardix',
+    PROXY_URL: window.SERVIPREMIA_PROXY_URL || 'https://TU-PROYECTO.vercel.app/api/rewardix',
     TIPOS_PUNTOS: {
         'points earned':   { label: '⭐ Puntos Ganados',   color: '#059669', icon: '⭐' },
         'points redeemed': { label: '🎁 Puntos Canjeados', color: '#f97316', icon: '🎁' }
@@ -115,7 +115,12 @@ async function searchServipremia() {
                 || eventName === 'points used';
         });
 
-        console.log(`🎯 [SERVIPREMIA] Points earned: ${pointsEarned.length}, Points redeemed: ${pointsRedeemed.length}`);
+        const cardInstalled = rewardixOps.filter(op => {
+            const eventName = String(op.eventName || '').toLowerCase().trim();
+            return eventName === 'card installed';
+        });
+
+        console.log(`🎯 [SERVIPREMIA] Points earned: ${pointsEarned.length}, Points redeemed: ${pointsRedeemed.length}, Card installed: ${cardInstalled.length}`);
 
         // Totales de puntos
         const totalPointsEarned = pointsEarned.reduce((sum, op) => {
@@ -144,6 +149,7 @@ async function searchServipremia() {
             totalOps: rewardixOps.length,
             pointsEarnedCount: pointsEarned.length,
             pointsRedeemedCount: pointsRedeemed.length,
+            cardInstalledCount: cardInstalled.length,
             totalPointsEarned,
             totalPointsRedeemed,
             desglosePorSucursal,
@@ -355,6 +361,7 @@ function renderServipremiaResults(data) {
         erpTotal, erpMonto,
         totalOps,
         pointsEarnedCount, pointsRedeemedCount,
+        cardInstalledCount,
         totalPointsEarned, totalPointsRedeemed,
         desglosePorSucursal
     } = data;
@@ -412,6 +419,14 @@ function renderServipremiaResults(data) {
                 <div class="stat-label">📈 Tasa de Canje</div>
                 <div style="font-size:0.7rem; margin-top:6px; opacity:0.9;">
                     Puntos canjeados / ganados
+                </div>
+            </div>
+
+            <div class="stat-card" style="background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);">
+                <div class="stat-number">${cardInstalledCount.toLocaleString('es-MX')}</div>
+                <div class="stat-label">💳 Card Installed</div>
+                <div style="font-size:0.7rem; margin-top:6px; opacity:0.9;">
+                    Registros nuevos en el periodo
                 </div>
             </div>
         </div>
@@ -575,6 +590,7 @@ function exportarServipremiaToExcel() {
         startDate, endDate,
         erpTotal, erpMonto,
         pointsEarnedCount, pointsRedeemedCount,
+        cardInstalledCount,
         totalPointsEarned, totalPointsRedeemed,
         desglosePorSucursal
     } = cachedServipremiaData;
@@ -596,6 +612,7 @@ function exportarServipremiaToExcel() {
         ['Puntos Ganados', totalPointsEarned],
         ['Transacciones Puntos Canjeados', pointsRedeemedCount],
         ['Puntos Canjeados', totalPointsRedeemed],
+        ['Card Installed - Registros nuevos', cardInstalledCount],
         ['Tasa de Canje (%)', porcentajeCanjeados.toFixed(2)],
         [],
         ['DESGLOSE POR SUCURSAL'],
