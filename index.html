@@ -246,6 +246,12 @@
                 <div class="card-icon">🎫</div>
                 <div class="card-title">Boletos RIFA </div>
             </div>
+
+            <!-- MÓDULO: SERVIPREMIA -->
+            <div class="nav-card" data-module="servipremia">
+                <div class="card-icon">🎁</div>
+                <div class="card-title">Servipremia</div>
+            </div>
         
         </div>
         
@@ -1116,6 +1122,37 @@
                 </div>
             </div>
 
+            <!-- MÓDULO: SERVIPREMIA (RECOMPENSAS) -->
+            <div id="servipremiaModule" class="module">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🎁 Servipremia - Recompensas</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="servipremiaErrorAlert" class="alert alert-error"></div>
+                        <div id="servipremiaInfoAlert" class="alert alert-info"></div>
+
+                        <div class="date-button-group">
+                            <div class="date-input">
+                                <label>📅 Fecha Inicio</label>
+                                <input type="date" id="servipremiaStartDate">
+                            </div>
+                            <div class="date-input">
+                                <label>📅 Fecha Fin</label>
+                                <input type="date" id="servipremiaEndDate">
+                            </div>
+                            <div class="query-button">
+                                <button id="searchServipremiaBtn" class="btn-tae" style="width:100%; padding:12px;">
+                                    🔍 Consultar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="servipremiaResults" style="display:none;margin-top:20px;"></div>
+                    </div>
+                </div>
+            </div>
+
         <!-- FOOTER -->
         <footer class="footer">
             <p>© Copyright - SADECO 2026</p>
@@ -1152,6 +1189,7 @@
     <script src="js/modules/timbres_fiscales.js"></script>
     <script src="js/modules/resumen_general.js"></script>
     <script src="js/modules/inventario_sucursal.js"></script>
+    <script src="js/modules/servipremia.js"></script>
 
 
 </body>

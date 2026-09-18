@@ -131,6 +131,21 @@ function setDefaultDates() {
     if (margenEndDate) {
         margenEndDate.value = endDateTransfer.toISOString().split('T')[0];
     }
+
+    // Fechas por defecto para Servipremia (últimos 7 días)
+    const servipremiaEndDate = new Date();
+    const servipremiaStartDate = new Date();
+    servipremiaStartDate.setDate(servipremiaStartDate.getDate() - 6);
+    const servipremiaStartEl = document.getElementById('servipremiaStartDate');
+    const servipremiaEndEl = document.getElementById('servipremiaEndDate');
+    const fmt = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+    };
+    if (servipremiaStartEl) servipremiaStartEl.value = fmt(servipremiaStartDate);
+    if (servipremiaEndEl) servipremiaEndEl.value = fmt(servipremiaEndDate);
 }
 
 // Inicializar navegación de tarjetas
@@ -170,6 +185,10 @@ function initNavigation() {
             if (moduleName === 'resumenGeneral' && typeof initResumenGeneralModule === 'function') {
                 setTimeout(initResumenGeneralModule, 100);
             }               
+
+            if (moduleName === 'servipremia' && typeof initServipremiaModule === 'function') {
+                setTimeout(initServipremiaModule, 100);
+            }
         });
     });
 }
