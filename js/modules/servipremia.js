@@ -168,17 +168,43 @@ function getServipremiaOperationDate(operation) {
     ]);
 }
 
-function getServipremiaOperationLocation(operation) {
-    const location = findServipremiaField(operation, [
+function getServipremiaBranchName(operation) {
+    const branch = findServipremiaField(operation, [
         'branchName', 'branch_name', 'storeName', 'store_name',
-        'locationName', 'location_name', 'managerName', 'manager_name',
-        'managerEmail', 'manager_email'
+        'locationName', 'location_name', 'branch', 'store',
+        'sucursal', 'sucursalName', 'sucursal_name'
     ]);
 
-    if (location) return String(location);
+    return branch ? String(branch) : 'No disponible';
+}
+
+function getServipremiaManagerName(operation, managersById = null) {
+    const explicitName = findServipremiaField(operation, [
+        'managerName', 'manager_name', 'managerFullName', 'manager_full_name',
+        'managerFullname', 'gerente', 'gerenteName', 'gerente_name'
+    ]);
+
+    if (explicitName) return String(explicitName);
 
     const managerId = findServipremiaField(operation, ['managerId', 'manager_id']);
+    if (managerId !== null && managerId !== undefined && managersById) {
+        const manager = managersById.get(String(managerId));
+        if (manager) return manager;
+    }
+
     return managerId ? `Gerente #${managerId}` : 'No disponible';
+}
+
+function getServipremiaOperationComment(operation) {
+    const comment = findServipremiaField(operation, [
+        'comment', 'comments', 'comentario', 'note', 'notes',
+        'description', 'descripcion', 'message', 'remark', 'remarks',
+        'reason', 'details', 'detail', 'observations', 'observaciones'
+    ]);
+
+    return comment === null || comment === undefined || String(comment).trim() === ''
+        ? 'Sin comentario'
+        : String(comment).trim();
 }
 
 function getServipremiaOperationId(operation) {
@@ -199,7 +225,7 @@ function formatServipremiaOperationDate(value) {
     return date.toLocaleString('es-MX');
 }
 
-function buildServipremiaClientBreakdown(operations) {
+function buildServipremiaClientBreakdown(operations, managersById = null) {
     const clients = new Map();
 
     operations.forEach((operation, index) => {
@@ -225,7 +251,9 @@ function buildServipremiaClientBreakdown(operations) {
         client.operations.push({
             amount,
             date: getServipremiaOperationDate(operation),
-            location: getServipremiaOperationLocation(operation),
+            location: getServipremiaBranchName(operation),
+            managerName: getServipremiaManagerName(operation, managersById),
+            comment: getServipremiaOperationComment(operation),
             operationId: getServipremiaOperationId(operation),
             phone: identity.phone,
             email: identity.email,
@@ -357,14 +385,21 @@ async function searchServipremia() {
         // Desglose por sucursal/gerente
         const managersData = await fetchRewardixManagers();
 
+        const managersById = new Map(
+            managersData.map(manager => [
+                String(manager.id),
+                manager.fullName || manager.name || manager.email || `Gerente #${manager.id}`
+            ])
+        );
+
         const desglosePorSucursal = buildDesglosePorSucursal(
             managersData,
             pointsEarned,
             pointsRedeemed
         );
 
-        const clientesGanaron = buildServipremiaClientBreakdown(pointsEarned);
-        const clientesCanjearon = buildServipremiaClientBreakdown(pointsRedeemed);
+        const clientesGanaron = buildServipremiaClientBreakdown(pointsEarned, managersById);
+        const clientesCanjearon = buildServipremiaClientBreakdown(pointsRedeemed, managersById);
 
         // Cache
         cachedServipremiaData = {
@@ -582,23 +617,170 @@ function buildDesglosePorSucursal(managers, pointsEarned, pointsRedeemed) {
         .sort((a, b) => (b.earnedPoints + b.redeemedPoints) - (a.earnedPoints + a.redeemedPoints));
 }
 
+function renderServipremiaPaginationControls(tableId) {
+    return `
+        <div data-servipremia-pagination-for="${tableId}" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin:10px 0; padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; font-size:0.8rem; color:#475569;">
+            <label style="display:flex; align-items:center; gap:6px; margin:0;">
+                Filas por página:
+                <select data-servipremia-page-size style="padding:5px 8px; border:1px solid #cbd5e1; border-radius:6px; background:#ffffff;">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </label>
+            <span data-servipremia-page-summary></span>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <button type="button" data-servipremia-page-prev style="border:1px solid #cbd5e1; background:#ffffff; color:#334155; border-radius:6px; padding:5px 9px; cursor:pointer;">‹ Anterior</button>
+                <span data-servipremia-page-number style="min-width:80px; text-align:center;"></span>
+                <button type="button" data-servipremia-page-next style="border:1px solid #cbd5e1; background:#ffffff; color:#334155; border-radius:6px; padding:5px 9px; cursor:pointer;">Siguiente ›</button>
+            </div>
+        </div>
+    `;
+}
+
+function getServipremiaSortValue(row, columnIndex) {
+    if (columnIndex === 0) return Number(row.dataset.originalIndex || 0);
+
+    const cell = row.cells[columnIndex];
+    const text = String(cell?.textContent || '').trim();
+    const numericText = text.replace(/[^0-9,.-]/g, '').replace(/,/g, '');
+    const numericValue = Number(numericText);
+
+    if (numericText && Number.isFinite(numericValue)) return numericValue;
+
+    const dateValue = Date.parse(text);
+    if (!Number.isNaN(dateValue) && /\d/.test(text)) return dateValue;
+
+    return text.toLocaleLowerCase('es-MX');
+}
+
+function setupServipremiaTable(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+
+    const tbody = table.querySelector('tbody');
+    const controls = document.querySelector(`[data-servipremia-pagination-for="${tableId}"]`);
+    if (!tbody || !controls) return;
+
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.forEach((row, index) => {
+        row.dataset.originalIndex = String(index);
+    });
+
+    const pageSizeSelect = controls.querySelector('[data-servipremia-page-size]');
+    const pageSummary = controls.querySelector('[data-servipremia-page-summary]');
+    const pageNumber = controls.querySelector('[data-servipremia-page-number]');
+    const previousButton = controls.querySelector('[data-servipremia-page-prev]');
+    const nextButton = controls.querySelector('[data-servipremia-page-next]');
+    const state = { page: 1, pageSize: 25, sortColumn: null, sortDirection: 1 };
+
+    const render = () => {
+        const orderedRows = Array.from(tbody.querySelectorAll('tr'));
+
+        if (state.sortColumn !== null) {
+            orderedRows.sort((rowA, rowB) => {
+                const valueA = getServipremiaSortValue(rowA, state.sortColumn);
+                const valueB = getServipremiaSortValue(rowB, state.sortColumn);
+
+                if (valueA < valueB) return -1 * state.sortDirection;
+                if (valueA > valueB) return 1 * state.sortDirection;
+                return 0;
+            });
+            orderedRows.forEach(row => tbody.appendChild(row));
+        }
+
+        const totalRows = orderedRows.length;
+        const totalPages = Math.max(1, Math.ceil(totalRows / state.pageSize));
+        state.page = Math.min(state.page, totalPages);
+
+        const firstVisible = totalRows === 0 ? 0 : (state.page - 1) * state.pageSize + 1;
+        const lastVisible = Math.min(state.page * state.pageSize, totalRows);
+
+        orderedRows.forEach((row, index) => {
+            row.style.display = index >= (state.page - 1) * state.pageSize && index < state.page * state.pageSize
+                ? ''
+                : 'none';
+
+            if (row.cells[0]) row.cells[0].textContent = String(index + 1);
+        });
+
+        pageSummary.textContent = `Mostrando ${firstVisible}-${lastVisible} de ${totalRows}`;
+        pageNumber.textContent = `Página ${state.page} de ${totalPages}`;
+        previousButton.disabled = state.page <= 1;
+        nextButton.disabled = state.page >= totalPages;
+        previousButton.style.opacity = previousButton.disabled ? '0.5' : '1';
+        nextButton.style.opacity = nextButton.disabled ? '0.5' : '1';
+
+        table.querySelectorAll('th[data-sort-index]').forEach(header => {
+            const indicator = header.querySelector('[data-sort-indicator]');
+            const index = Number(header.dataset.sortIndex);
+            if (indicator) {
+                indicator.textContent = state.sortColumn === index
+                    ? (state.sortDirection === 1 ? ' ▲' : ' ▼')
+                    : ' ↕';
+            }
+            header.setAttribute('aria-sort', state.sortColumn === index
+                ? (state.sortDirection === 1 ? 'ascending' : 'descending')
+                : 'none');
+        });
+    };
+
+    pageSizeSelect.addEventListener('change', () => {
+        state.pageSize = Number(pageSizeSelect.value) || 25;
+        state.page = 1;
+        render();
+    });
+    previousButton.addEventListener('click', () => {
+        if (state.page > 1) {
+            state.page--;
+            render();
+        }
+    });
+    nextButton.addEventListener('click', () => {
+        const totalPages = Math.max(1, Math.ceil(rows.length / state.pageSize));
+        if (state.page < totalPages) {
+            state.page++;
+            render();
+        }
+    });
+    table.querySelectorAll('th[data-sort-index]').forEach(header => {
+        header.style.cursor = 'pointer';
+        header.title = 'Haz clic para ordenar';
+        header.addEventListener('click', () => {
+            const column = Number(header.dataset.sortIndex);
+            if (state.sortColumn === column) {
+                state.sortDirection *= -1;
+            } else {
+                state.sortColumn = column;
+                state.sortDirection = 1;
+            }
+            state.page = 1;
+            render();
+        });
+    });
+
+    render();
+}
+
 function renderServipremiaBranchTable(rows) {
     if (!rows || rows.length === 0) {
         return '<div class="alert alert-info">No hay datos de sucursales para este periodo.</div>';
     }
 
+    const tableId = 'servipremiaBranchesTable';
     let html = `
+        ${renderServipremiaPaginationControls(tableId)}
         <div class="table-container">
-            <table class="imei-table" style="font-size:0.85rem;">
+            <table id="${tableId}" class="imei-table" style="font-size:0.85rem;">
                 <thead>
                     <tr>
-                        <th style="width:50px; text-align:center;">#</th>
-                        <th>Sucursal / Gerente</th>
-                        <th style="text-align:center;">⭐ Tx Ganados</th>
-                        <th style="text-align:right;">⭐ Puntos Ganados</th>
-                        <th style="text-align:center;">🎁 Tx Canjeados</th>
-                        <th style="text-align:right;">🎁 Puntos Canjeados</th>
-                        <th style="text-align:center;">📈 Tasa de Canje</th>
+                        <th data-sort-index="0" style="width:50px; text-align:center;">#<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="1">Sucursal / Gerente<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="2" style="text-align:center;">⭐ Tx Ganados<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="3" style="text-align:right;">⭐ Puntos Ganados<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="4" style="text-align:center;">🎁 Tx Canjeados<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="5" style="text-align:right;">🎁 Puntos Canjeados<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="6" style="text-align:center;">📈 Tasa de Canje<span data-sort-indicator> ↕</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -660,19 +842,21 @@ function renderServipremiaClientTable(clients, type) {
     const isEarned = type === 'earned';
     const accentColor = isEarned ? '#059669' : '#f97316';
     const pointLabel = isEarned ? 'Puntos acumulados' : 'Puntos canjeados';
+    const tableId = `servipremiaClients${type === 'earned' ? 'Earned' : 'Redeemed'}Table`;
 
     let html = `
+        ${renderServipremiaPaginationControls(tableId)}
         <div class="table-container">
-            <table class="imei-table" style="font-size:0.85rem;">
+            <table id="${tableId}" class="imei-table" style="font-size:0.85rem;">
                 <thead>
                     <tr>
-                        <th style="width:50px; text-align:center;">#</th>
-                        <th>Cliente</th>
-                        <th>Teléfono</th>
-                        <th>Correo</th>
-                        <th style="text-align:center;">Operaciones</th>
-                        <th style="text-align:right;">${pointLabel}</th>
-                        <th style="text-align:center;">Detalle</th>
+                        <th data-sort-index="0" style="width:50px; text-align:center;">#<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="1">Cliente<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="2">Teléfono<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="3">Correo<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="4" style="text-align:center;">Operaciones<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="5" style="text-align:right;">${pointLabel}<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="6" style="text-align:center;">Detalle<span data-sort-indicator> ↕</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -737,15 +921,18 @@ function renderServipremiaClientModal(client, type) {
         </div>
 
         <h4 style="color:#1e40af; margin:0 0 10px;">${title}</h4>
+        ${renderServipremiaPaginationControls('servipremiaClientOperationsTable')}
         <div class="table-container">
-            <table class="imei-table" style="font-size:0.8rem;">
+            <table id="servipremiaClientOperationsTable" class="imei-table" style="font-size:0.8rem;">
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Fecha</th>
-                        <th style="text-align:right;">Puntos</th>
-                        <th>Sucursal / Gerente</th>
-                        <th>Identificador</th>
+                        <th data-sort-index="0">#<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="1">Fecha<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="2" style="text-align:right;">Puntos<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="3">Sucursal<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="4">Gerente<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="5">Comentario<span data-sort-indicator> ↕</span></th>
+                        <th data-sort-index="6">Identificador<span data-sort-indicator> ↕</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -758,6 +945,8 @@ function renderServipremiaClientModal(client, type) {
                 <td>${escapeHtml(formatServipremiaOperationDate(operation.date))}</td>
                 <td style="text-align:right; color:${accentColor}; font-weight:700;">${operation.amount.toLocaleString('es-MX')}</td>
                 <td>${escapeHtml(operation.location)}</td>
+                <td>${escapeHtml(operation.managerName || 'No disponible')}</td>
+                <td style="min-width:220px; white-space:normal;">${escapeHtml(operation.comment || 'Sin comentario')}</td>
                 <td>${escapeHtml(operation.operationId)}</td>
             </tr>
         `;
@@ -784,6 +973,7 @@ function openServipremiaClientModal(client, type) {
         : '🎁 Cliente que canjeó puntos';
     body.innerHTML = renderServipremiaClientModal(client, type);
     modal.style.display = 'block';
+    setupServipremiaTable('servipremiaClientOperationsTable');
 }
 
 function setupServipremiaBreakdownEvents(clientesGanaron, clientesCanjearon) {
@@ -812,6 +1002,10 @@ function setupServipremiaBreakdownEvents(clientesGanaron, clientesCanjearon) {
         earned: clientesGanaron || [],
         redeemed: clientesCanjearon || []
     };
+
+    setupServipremiaTable('servipremiaBranchesTable');
+    setupServipremiaTable('servipremiaClientsEarnedTable');
+    setupServipremiaTable('servipremiaClientsRedeemedTable');
 
     document.querySelectorAll('.servipremia-client-link').forEach(button => {
         button.addEventListener('click', () => {
