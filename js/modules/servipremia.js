@@ -50,10 +50,48 @@ function normalizeServipremiaPhone(value) {
     return digits.length >= 7 ? digits : null;
 }
 
-function getServipremiaPhone(operation) {
+function normalizeServipremiaKey(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toLowerCase();
+}
+
+function findServipremiaField(operation, aliases, maxDepth = 4) {
     if (!operation || typeof operation !== 'object') return null;
 
-    const phoneKeys = new Set([
+    const aliasSet = new Set(aliases.map(normalizeServipremiaKey));
+
+    const visit = (value, depth = 0) => {
+        if (!value || typeof value !== 'object' || depth > maxDepth) return null;
+
+        for (const [key, fieldValue] of Object.entries(value)) {
+            if (
+                aliasSet.has(normalizeServipremiaKey(key)) &&
+                fieldValue !== null &&
+                fieldValue !== undefined &&
+                typeof fieldValue !== 'object'
+            ) {
+                return fieldValue;
+            }
+        }
+
+        for (const nestedValue of Object.values(value)) {
+            if (nestedValue && typeof nestedValue === 'object') {
+                const found = visit(nestedValue, depth + 1);
+                if (found !== null && found !== undefined) return found;
+            }
+        }
+
+        return null;
+    };
+
+    return visit(operation);
+}
+
+function getServipremiaPhone(operation) {
+    const phone = findServipremiaField(operation, [
         'phone', 'phoneNumber', 'phone_number',
         'mobile', 'mobileNumber', 'mobile_number',
         'telephone', 'telephoneNumber', 'telephone_number',
@@ -62,27 +100,141 @@ function getServipremiaPhone(operation) {
         'userPhone', 'user_phone', 'msisdn'
     ]);
 
-    const visit = (value, depth = 0) => {
-        if (!value || typeof value !== 'object' || depth > 3) return null;
+    return normalizeServipremiaPhone(phone);
+}
 
-        for (const [key, fieldValue] of Object.entries(value)) {
-            if (phoneKeys.has(key) && fieldValue !== null && fieldValue !== undefined) {
-                const normalized = normalizeServipremiaPhone(fieldValue);
-                if (normalized) return normalized;
-            }
-        }
+function getServipremiaClientIdentity(operation, fallbackIndex) {
+    const phone = getServipremiaPhone(operation);
+    const emailValue = findServipremiaField(operation, [
+        'email', 'emailAddress', 'email_address',
+        'customerEmail', 'customer_email',
+        'userEmail', 'user_email', 'correo'
+    ]);
+    const email = emailValue ? String(emailValue).trim().toLowerCase() : null;
 
-        for (const nestedValue of Object.values(value)) {
-            if (nestedValue && typeof nestedValue === 'object') {
-                const normalized = visit(nestedValue, depth + 1);
-                if (normalized) return normalized;
-            }
-        }
+    const firstName = findServipremiaField(operation, [
+        'firstName', 'first_name', 'customerFirstName', 'customer_first_name',
+        'userFirstName', 'user_first_name', 'nombre'
+    ]);
+    const lastName = findServipremiaField(operation, [
+        'lastName', 'last_name', 'customerLastName', 'customer_last_name',
+        'userLastName', 'user_last_name', 'apellido', 'apellidos'
+    ]);
+    const nameValue = findServipremiaField(operation, [
+        'customerName', 'customer_name', 'clientName', 'client_name',
+        'fullName', 'full_name', 'userName', 'user_name',
+        'customer', 'client', 'nombreCliente', 'nombre_completo', 'name'
+    ]);
 
-        return null;
+    const composedName = [firstName, lastName]
+        .filter(value => value !== null && value !== undefined && String(value).trim())
+        .map(value => String(value).trim())
+        .join(' ');
+    const name = String(nameValue || composedName || '').trim() || 'Cliente no identificado';
+
+    const idValue = findServipremiaField(operation, [
+        'customerId', 'customer_id', 'clientId', 'client_id',
+        'userId', 'user_id', 'memberId', 'member_id', 'customerUuid',
+        'uuid'
+    ]);
+    const clientId = idValue !== null && idValue !== undefined
+        ? String(idValue).trim()
+        : null;
+
+    let key;
+    if (phone) key = `phone:${phone}`;
+    else if (email) key = `email:${email}`;
+    else if (clientId) key = `id:${clientId}`;
+    else if (name !== 'Cliente no identificado') {
+        key = `name:${normalizeServipremiaKey(name)}`;
+    } else {
+        key = `unknown:${fallbackIndex}`;
+    }
+
+    return {
+        key,
+        name,
+        phone,
+        email,
+        clientId
     };
+}
 
-    return visit(operation);
+function getServipremiaOperationDate(operation) {
+    return findServipremiaField(operation, [
+        'createdAt', 'created_at', 'eventDate', 'event_date',
+        'operationDate', 'operation_date', 'occurredAt', 'occurred_at',
+        'timestamp', 'date', 'fecha'
+    ]);
+}
+
+function getServipremiaOperationLocation(operation) {
+    const location = findServipremiaField(operation, [
+        'branchName', 'branch_name', 'storeName', 'store_name',
+        'locationName', 'location_name', 'managerName', 'manager_name',
+        'managerEmail', 'manager_email'
+    ]);
+
+    if (location) return String(location);
+
+    const managerId = findServipremiaField(operation, ['managerId', 'manager_id']);
+    return managerId ? `Gerente #${managerId}` : 'No disponible';
+}
+
+function getServipremiaOperationId(operation) {
+    const id = findServipremiaField(operation, [
+        'operationId', 'operation_id', 'transactionId', 'transaction_id',
+        'eventId', 'event_id', 'uuid', 'id'
+    ]);
+
+    return id === null || id === undefined || id === '' ? 'Sin identificador' : String(id);
+}
+
+function formatServipremiaOperationDate(value) {
+    if (!value) return 'Fecha no disponible';
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+
+    return date.toLocaleString('es-MX');
+}
+
+function buildServipremiaClientBreakdown(operations) {
+    const clients = new Map();
+
+    operations.forEach((operation, index) => {
+        const identity = getServipremiaClientIdentity(operation, index);
+        const amount = parseFloat(operation.amount) || 0;
+
+        if (!clients.has(identity.key)) {
+            clients.set(identity.key, {
+                key: identity.key,
+                name: identity.name,
+                phone: identity.phone,
+                email: identity.email,
+                clientId: identity.clientId,
+                operationCount: 0,
+                totalPoints: 0,
+                operations: []
+            });
+        }
+
+        const client = clients.get(identity.key);
+        client.operationCount++;
+        client.totalPoints += amount;
+        client.operations.push({
+            amount,
+            date: getServipremiaOperationDate(operation),
+            location: getServipremiaOperationLocation(operation),
+            operationId: getServipremiaOperationId(operation),
+            phone: identity.phone,
+            email: identity.email,
+            raw: operation
+        });
+    });
+
+    return Array.from(clients.values())
+        .sort((a, b) => b.totalPoints - a.totalPoints || b.operationCount - a.operationCount);
 }
 
 // ==================== INICIALIZACIÓN ====================
@@ -211,6 +363,9 @@ async function searchServipremia() {
             pointsRedeemed
         );
 
+        const clientesGanaron = buildServipremiaClientBreakdown(pointsEarned);
+        const clientesCanjearon = buildServipremiaClientBreakdown(pointsRedeemed);
+
         // Cache
         cachedServipremiaData = {
             startDate,
@@ -226,6 +381,8 @@ async function searchServipremia() {
             totalPointsEarned,
             totalPointsRedeemed,
             desglosePorSucursal,
+            clientesGanaron,
+            clientesCanjearon,
             fechaConsulta: new Date().toISOString()
         };
 
@@ -425,6 +582,259 @@ function buildDesglosePorSucursal(managers, pointsEarned, pointsRedeemed) {
         .sort((a, b) => (b.earnedPoints + b.redeemedPoints) - (a.earnedPoints + a.redeemedPoints));
 }
 
+function renderServipremiaBranchTable(rows) {
+    if (!rows || rows.length === 0) {
+        return '<div class="alert alert-info">No hay datos de sucursales para este periodo.</div>';
+    }
+
+    let html = `
+        <div class="table-container">
+            <table class="imei-table" style="font-size:0.85rem;">
+                <thead>
+                    <tr>
+                        <th style="width:50px; text-align:center;">#</th>
+                        <th>Sucursal / Gerente</th>
+                        <th style="text-align:center;">⭐ Tx Ganados</th>
+                        <th style="text-align:right;">⭐ Puntos Ganados</th>
+                        <th style="text-align:center;">🎁 Tx Canjeados</th>
+                        <th style="text-align:right;">🎁 Puntos Canjeados</th>
+                        <th style="text-align:center;">📈 Tasa de Canje</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    rows.forEach((row, idx) => {
+        const tasaCanje = row.earnedPoints > 0
+            ? (row.redeemedPoints / row.earnedPoints) * 100
+            : 0;
+        const tasaColor = tasaCanje >= 80 ? '#059669'
+                        : tasaCanje >= 50 ? '#f59e0b'
+                        : '#f97316';
+        const bgRow = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+
+        html += `
+            <tr style="background:${bgRow}; border-bottom:1px solid #e2e8f0;">
+                <td style="text-align:center; color:#64748b;">${idx + 1}</td>
+                <td>
+                    <div style="font-weight:600; color:#1e293b;">${escapeHtml(row.nombre)}</div>
+                    ${row.email ? `<div style="font-size:0.7rem; color:#64748b;">${escapeHtml(row.email)}</div>` : ''}
+                </td>
+                <td style="text-align:center; color:#059669; font-weight:600;">${row.earnedCount.toLocaleString('es-MX')}</td>
+                <td style="text-align:right; color:#059669; font-weight:700;">${row.earnedPoints.toLocaleString('es-MX')}</td>
+                <td style="text-align:center; color:#f97316; font-weight:600;">${row.redeemedCount.toLocaleString('es-MX')}</td>
+                <td style="text-align:right; color:#f97316; font-weight:700;">${row.redeemedPoints.toLocaleString('es-MX')}</td>
+                <td style="text-align:center;">
+                    <span style="background:${tasaColor}; color:white; padding:3px 10px; border-radius:12px; font-size:0.75rem; font-weight:700;">
+                        ${tasaCanje.toFixed(1)}%
+                    </span>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+                <tfoot style="background:#f1f5f9; border-top:2px solid #1e40af;">
+                    <tr style="font-weight:bold;">
+                        <td colspan="2" style="text-align:right; padding:10px;">TOTALES:</td>
+                        <td style="text-align:center; color:#059669; padding:10px;">${rows.reduce((sum, row) => sum + row.earnedCount, 0).toLocaleString('es-MX')}</td>
+                        <td style="text-align:right; color:#059669; padding:10px;">${rows.reduce((sum, row) => sum + row.earnedPoints, 0).toLocaleString('es-MX')}</td>
+                        <td style="text-align:center; color:#f97316; padding:10px;">${rows.reduce((sum, row) => sum + row.redeemedCount, 0).toLocaleString('es-MX')}</td>
+                        <td style="text-align:right; color:#f97316; padding:10px;">${rows.reduce((sum, row) => sum + row.redeemedPoints, 0).toLocaleString('es-MX')}</td>
+                        <td style="text-align:center; padding:10px;">—</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    `;
+
+    return html;
+}
+
+function renderServipremiaClientTable(clients, type) {
+    if (!clients || clients.length === 0) {
+        return '<div class="alert alert-info">No hay clientes para este tipo de operación en el periodo seleccionado.</div>';
+    }
+
+    const isEarned = type === 'earned';
+    const accentColor = isEarned ? '#059669' : '#f97316';
+    const pointLabel = isEarned ? 'Puntos acumulados' : 'Puntos canjeados';
+
+    let html = `
+        <div class="table-container">
+            <table class="imei-table" style="font-size:0.85rem;">
+                <thead>
+                    <tr>
+                        <th style="width:50px; text-align:center;">#</th>
+                        <th>Cliente</th>
+                        <th>Teléfono</th>
+                        <th>Correo</th>
+                        <th style="text-align:center;">Operaciones</th>
+                        <th style="text-align:right;">${pointLabel}</th>
+                        <th style="text-align:center;">Detalle</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    clients.forEach((client, index) => {
+        html += `
+            <tr style="border-bottom:1px solid #e2e8f0;">
+                <td style="text-align:center; color:#64748b;">${index + 1}</td>
+                <td>
+                    <button type="button" class="servipremia-client-link" data-client-type="${type}" data-client-index="${index}" style="border:0; background:transparent; color:${accentColor}; font-weight:700; cursor:pointer; padding:0; text-align:left; text-decoration:underline;">
+                        ${escapeHtml(client.name)}
+                    </button>
+                    ${client.clientId ? `<div style="font-size:0.7rem; color:#64748b; margin-top:3px;">ID: ${escapeHtml(client.clientId)}</div>` : ''}
+                </td>
+                <td>${escapeHtml(client.phone || 'No disponible')}</td>
+                <td>${escapeHtml(client.email || 'No disponible')}</td>
+                <td style="text-align:center; font-weight:700;">${client.operationCount.toLocaleString('es-MX')}</td>
+                <td style="text-align:right; color:${accentColor}; font-weight:700;">${client.totalPoints.toLocaleString('es-MX')}</td>
+                <td style="text-align:center;">
+                    <button type="button" class="servipremia-client-link" data-client-type="${type}" data-client-index="${index}" style="border:0; background:${accentColor}; color:white; border-radius:8px; padding:6px 10px; cursor:pointer; font-size:0.75rem;">
+                        Ver operaciones
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+                <tfoot style="background:#f1f5f9; border-top:2px solid ${accentColor};">
+                    <tr style="font-weight:bold;">
+                        <td colspan="4" style="text-align:right; padding:10px;">TOTALES:</td>
+                        <td style="text-align:center; padding:10px;">${clients.reduce((sum, client) => sum + client.operationCount, 0).toLocaleString('es-MX')}</td>
+                        <td style="text-align:right; color:${accentColor}; padding:10px;">${clients.reduce((sum, client) => sum + client.totalPoints, 0).toLocaleString('es-MX')}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    `;
+
+    return html;
+}
+
+function renderServipremiaClientModal(client, type) {
+    const isEarned = type === 'earned';
+    const accentColor = isEarned ? '#059669' : '#f97316';
+    const title = isEarned ? 'Operaciones donde acumuló puntos' : 'Operaciones donde canjeó puntos';
+    const operations = client.operations || [];
+
+    let html = `
+        <div style="background:#f8fafc; border-left:4px solid ${accentColor}; padding:12px; border-radius:8px; margin-bottom:16px;">
+            <div style="font-weight:700; color:#1e293b; font-size:1rem;">${escapeHtml(client.name)}</div>
+            <div style="font-size:0.8rem; color:#475569; margin-top:5px;">
+                📱 ${escapeHtml(client.phone || 'Teléfono no disponible')}
+                ${client.email ? `&nbsp;&nbsp;✉️ ${escapeHtml(client.email)}` : ''}
+            </div>
+            <div style="font-size:0.8rem; color:${accentColor}; font-weight:700; margin-top:6px;">
+                ${client.operationCount.toLocaleString('es-MX')} operaciones · ${client.totalPoints.toLocaleString('es-MX')} puntos
+            </div>
+        </div>
+
+        <h4 style="color:#1e40af; margin:0 0 10px;">${title}</h4>
+        <div class="table-container">
+            <table class="imei-table" style="font-size:0.8rem;">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Fecha</th>
+                        <th style="text-align:right;">Puntos</th>
+                        <th>Sucursal / Gerente</th>
+                        <th>Identificador</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    operations.forEach((operation, index) => {
+        html += `
+            <tr>
+                <td style="text-align:center;">${index + 1}</td>
+                <td>${escapeHtml(formatServipremiaOperationDate(operation.date))}</td>
+                <td style="text-align:right; color:${accentColor}; font-weight:700;">${operation.amount.toLocaleString('es-MX')}</td>
+                <td>${escapeHtml(operation.location)}</td>
+                <td>${escapeHtml(operation.operationId)}</td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    return html;
+}
+
+function openServipremiaClientModal(client, type) {
+    const modal = document.getElementById('servipremiaClientModal');
+    const title = document.getElementById('servipremiaClientModalTitle');
+    const body = document.getElementById('servipremiaClientModalBody');
+
+    if (!modal || !title || !body || !client) return;
+
+    title.textContent = type === 'earned'
+        ? '⭐ Cliente que acumuló puntos'
+        : '🎁 Cliente que canjeó puntos';
+    body.innerHTML = renderServipremiaClientModal(client, type);
+    modal.style.display = 'block';
+}
+
+function setupServipremiaBreakdownEvents(clientesGanaron, clientesCanjearon) {
+    const panels = {
+        branches: document.getElementById('servipremiaBranchesPanel'),
+        earned: document.getElementById('servipremiaEarnedPanel'),
+        redeemed: document.getElementById('servipremiaRedeemedPanel')
+    };
+
+    document.querySelectorAll('.servipremia-breakdown-tab').forEach(button => {
+        button.addEventListener('click', () => {
+            const selected = button.dataset.servipremiaTab;
+
+            document.querySelectorAll('.servipremia-breakdown-tab').forEach(tab => {
+                tab.style.background = tab.dataset.servipremiaTab === selected ? '#1e40af' : '#e2e8f0';
+                tab.style.color = tab.dataset.servipremiaTab === selected ? '#ffffff' : '#334155';
+            });
+
+            Object.entries(panels).forEach(([key, panel]) => {
+                if (panel) panel.style.display = key === selected ? 'block' : 'none';
+            });
+        });
+    });
+
+    const clientLists = {
+        earned: clientesGanaron || [],
+        redeemed: clientesCanjearon || []
+    };
+
+    document.querySelectorAll('.servipremia-client-link').forEach(button => {
+        button.addEventListener('click', () => {
+            const type = button.dataset.clientType;
+            const index = Number(button.dataset.clientIndex);
+            openServipremiaClientModal(clientLists[type]?.[index], type);
+        });
+    });
+
+    const modal = document.getElementById('servipremiaClientModal');
+    const closeModal = () => {
+        if (modal) modal.style.display = 'none';
+    };
+    const closeButton = document.getElementById('servipremiaClientModalClose');
+
+    if (closeButton) closeButton.addEventListener('click', closeModal);
+    if (modal) {
+        modal.addEventListener('click', event => {
+            if (event.target === modal) closeModal();
+        });
+    }
+}
+
 // ==================== RENDERIZAR ====================
 function renderServipremiaResults(data) {
     const container = document.getElementById('servipremiaResults');
@@ -436,7 +846,9 @@ function renderServipremiaResults(data) {
         pointsEarnedCount, pointsRedeemedCount,
         cardInstalledCount,
         totalPointsEarned, totalPointsRedeemed,
-        desglosePorSucursal
+        desglosePorSucursal,
+        clientesGanaron = [],
+        clientesCanjearon = []
     } = data;
 
     // Calcular porcentajes
@@ -550,77 +962,45 @@ function renderServipremiaResults(data) {
         </div>
     `;
 
-    // Desglose por sucursal
-    if (desglosePorSucursal.length > 0) {
-        html += `
-            <h4 style="color: #1e40af; margin-bottom: 12px;">🏪 Desglose por Sucursal</h4>
-            <div class="table-container">
-                <table class="imei-table" style="font-size:0.85rem;">
-                    <thead>
-                        <tr>
-                            <th style="width:50px; text-align:center;">#</th>
-                            <th>Sucursal / Gerente</th>
-                            <th style="text-align:center;">⭐ Tx Ganados</th>
-                            <th style="text-align:right;">⭐ Puntos Ganados</th>
-                            <th style="text-align:center;">🎁 Tx Canjeados</th>
-                            <th style="text-align:right;">🎁 Puntos Canjeados</th>
-                            <th style="text-align:center;">📈 Tasa de Canje</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-
-        desglosePorSucursal.forEach((row, idx) => {
-            const tasaCanje = row.earnedPoints > 0
-                ? (row.redeemedPoints / row.earnedPoints) * 100
-                : 0;
-
-            const tasaColor = tasaCanje >= 80 ? '#059669'
-                            : tasaCanje >= 50 ? '#f59e0b'
-                            : '#f97316';
-
-            const bgRow = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
-
-            html += `
-                <tr style="background:${bgRow}; border-bottom:1px solid #e2e8f0;">
-                    <td style="text-align:center; color:#64748b;">${idx + 1}</td>
-                    <td>
-                        <div style="font-weight:600; color:#1e293b;">${escapeHtml(row.nombre)}</div>
-                        ${row.email ? `<div style="font-size:0.7rem; color:#64748b;">${escapeHtml(row.email)}</div>` : ''}
-                    </td>
-                    <td style="text-align:center; color:#059669; font-weight:600;">${row.earnedCount.toLocaleString('es-MX')}</td>
-                    <td style="text-align:right; color:#059669; font-weight:700;">${row.earnedPoints.toLocaleString('es-MX')}</td>
-                    <td style="text-align:center; color:#f97316; font-weight:600;">${row.redeemedCount.toLocaleString('es-MX')}</td>
-                    <td style="text-align:right; color:#f97316; font-weight:700;">${row.redeemedPoints.toLocaleString('es-MX')}</td>
-                    <td style="text-align:center;">
-                        <span style="background:${tasaColor}; color:white; padding:3px 10px; border-radius:12px; font-size:0.75rem; font-weight:700;">
-                            ${tasaCanje.toFixed(1)}%
-                        </span>
-                    </td>
-                </tr>
-            `;
-        });
-
-        html += `
-                    </tbody>
-                    <tfoot style="background:#f1f5f9; border-top:2px solid #1e40af;">
-                        <tr style="font-weight:bold;">
-                            <td colspan="2" style="text-align:right; padding:10px;">TOTALES:</td>
-                            <td style="text-align:center; color:#059669; padding:10px;">${pointsEarnedCount.toLocaleString('es-MX')}</td>
-                            <td style="text-align:right; color:#059669; padding:10px;">${totalPointsEarned.toLocaleString('es-MX')}</td>
-                            <td style="text-align:center; color:#f97316; padding:10px;">${pointsRedeemedCount.toLocaleString('es-MX')}</td>
-                            <td style="text-align:right; color:#f97316; padding:10px;">${totalPointsRedeemed.toLocaleString('es-MX')}</td>
-                            <td style="text-align:center; padding:10px;">
-                                <span style="background:#7c3aed; color:white; padding:3px 10px; border-radius:12px; font-size:0.75rem; font-weight:700;">
-                                    ${porcentajeCanjeados.toFixed(1)}%
-                                </span>
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
+    // Desglose interactivo: sucursales y clientes
+    html += `
+        <div style="margin-top:28px;">
+            <h4 style="color:#1e40af; margin-bottom:12px;">📋 Desgloses detallados</h4>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; border-bottom:2px solid #e2e8f0; padding-bottom:10px;">
+                <button type="button" class="servipremia-breakdown-tab" data-servipremia-tab="branches" style="border:0; border-radius:8px; padding:9px 14px; background:#1e40af; color:#ffffff; cursor:pointer; font-weight:700;">
+                    🏪 Por sucursal
+                </button>
+                <button type="button" class="servipremia-breakdown-tab" data-servipremia-tab="earned" style="border:0; border-radius:8px; padding:9px 14px; background:#e2e8f0; color:#334155; cursor:pointer; font-weight:700;">
+                    ⭐ Clientes que acumularon
+                </button>
+                <button type="button" class="servipremia-breakdown-tab" data-servipremia-tab="redeemed" style="border:0; border-radius:8px; padding:9px 14px; background:#e2e8f0; color:#334155; cursor:pointer; font-weight:700;">
+                    🎁 Clientes que canjearon
+                </button>
             </div>
-        `;
-    }
+
+            <div id="servipremiaBranchesPanel">
+                ${renderServipremiaBranchTable(desglosePorSucursal)}
+            </div>
+
+            <div id="servipremiaEarnedPanel" style="display:none;">
+                ${renderServipremiaClientTable(clientesGanaron, 'earned')}
+            </div>
+
+            <div id="servipremiaRedeemedPanel" style="display:none;">
+                ${renderServipremiaClientTable(clientesCanjearon, 'redeemed')}
+            </div>
+        </div>
+
+        <div id="servipremiaClientModal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(15,23,42,0.72); padding:20px; overflow:auto;">
+            <div style="background:#ffffff; max-width:1000px; margin:4vh auto; border-radius:16px; box-shadow:0 20px 50px rgba(0,0,0,0.3); overflow:hidden;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; background:linear-gradient(135deg,#1e40af,#3b82f6); color:#ffffff;">
+                    <h3 id="servipremiaClientModalTitle" style="margin:0; font-size:1rem;">Detalle del cliente</h3>
+                    <button type="button" id="servipremiaClientModalClose" aria-label="Cerrar" style="border:0; background:rgba(255,255,255,0.2); color:#ffffff; border-radius:8px; width:34px; height:34px; cursor:pointer; font-size:1.3rem;">&times;</button>
+                </div>
+                <div id="servipremiaClientModalBody" style="padding:20px; max-height:72vh; overflow:auto;"></div>
+            </div>
+        </div>
+    `;
 
     // Botón exportar
     html += `
@@ -650,6 +1030,8 @@ function renderServipremiaResults(data) {
     if (exportBtn) {
         exportBtn.addEventListener('click', exportarServipremiaToExcel);
     }
+
+    setupServipremiaBreakdownEvents(clientesGanaron, clientesCanjearon);
 }
 
 // ==================== EXPORTAR A EXCEL ====================
