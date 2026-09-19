@@ -7,10 +7,7 @@ let servipremiaInicializado = false;
 
 // ==================== CONFIGURACIÓN ====================
 const SERVIPREMIA_CONFIG = {
-    // Cambia este dominio por el deployment real de Vercel.
-    // También puede definirse antes de cargar este archivo con:
-    // window.SERVIPREMIA_PROXY_URL = 'https://tu-proyecto.vercel.app/api/rewardix';
-    PROXY_URL: window.SERVIPREMIA_PROXY_URL || 'https://proyecto-erp-reportes-gamma.vercel.app/api/rewardix',
+    PROXY_URL: 'https://proyecto-erp-reportes-gamma.vercel.app/api/rewardix',
     TIPOS_PUNTOS: {
         'points earned':   { label: '⭐ Puntos Ganados',   color: '#059669', icon: '⭐' },
         'points redeemed': { label: '🎁 Puntos Canjeados', color: '#f97316', icon: '🎁' }
@@ -27,6 +24,65 @@ function servipremiaFormatDateInput(date) {
 
 function getRewardixUrl() {
     return SERVIPREMIA_CONFIG.PROXY_URL;
+}
+
+// ==================== VALIDACIÓN DE TELÉFONOS ====================
+// Rewardix puede entregar el teléfono con nombres de campo diferentes
+// según la versión de la respuesta. Se revisan los nombres habituales.
+function normalizeServipremiaPhone(value) {
+    if (value === null || value === undefined) return null;
+
+    const digits = String(value).replace(/\D/g, '');
+    if (!digits) return null;
+
+    // Normalización para teléfonos mexicanos:
+    // +52 9991234567 -> 9991234567
+    // +521 9991234567 -> 9991234567
+    if (digits.length === 13 && digits.startsWith('521')) {
+        return digits.slice(3);
+    }
+
+    if (digits.length === 12 && digits.startsWith('52')) {
+        return digits.slice(2);
+    }
+
+    // Para otros formatos se conserva el número completo normalizado.
+    return digits.length >= 7 ? digits : null;
+}
+
+function getServipremiaPhone(operation) {
+    if (!operation || typeof operation !== 'object') return null;
+
+    const phoneKeys = new Set([
+        'phone', 'phoneNumber', 'phone_number',
+        'mobile', 'mobileNumber', 'mobile_number',
+        'telephone', 'telephoneNumber', 'telephone_number',
+        'tel', 'telefono', 'númeroTelefono', 'numeroTelefono',
+        'customerPhone', 'customer_phone',
+        'userPhone', 'user_phone', 'msisdn'
+    ]);
+
+    const visit = (value, depth = 0) => {
+        if (!value || typeof value !== 'object' || depth > 3) return null;
+
+        for (const [key, fieldValue] of Object.entries(value)) {
+            if (phoneKeys.has(key) && fieldValue !== null && fieldValue !== undefined) {
+                const normalized = normalizeServipremiaPhone(fieldValue);
+                if (normalized) return normalized;
+            }
+        }
+
+        for (const nestedValue of Object.values(value)) {
+            if (nestedValue && typeof nestedValue === 'object') {
+                const normalized = visit(nestedValue, depth + 1);
+                if (normalized) return normalized;
+            }
+        }
+
+        return null;
+    };
+
+    return visit(operation);
 }
 
 // ==================== INICIALIZACIÓN ====================
@@ -120,7 +176,22 @@ async function searchServipremia() {
             return eventName === 'card installed';
         });
 
-        console.log(`🎯 [SERVIPREMIA] Points earned: ${pointsEarned.length}, Points redeemed: ${pointsRedeemed.length}, Card installed: ${cardInstalled.length}`);
+        const cardInstalledPhones = new Set();
+        let cardInstalledWithoutPhone = 0;
+
+        cardInstalled.forEach(operation => {
+            const phone = getServipremiaPhone(operation);
+
+            if (phone) {
+                cardInstalledPhones.add(phone);
+            } else {
+                cardInstalledWithoutPhone++;
+            }
+        });
+
+        const cardInstalledUniqueCount = cardInstalledPhones.size;
+
+        console.log(`🎯 [SERVIPREMIA] Points earned: ${pointsEarned.length}, Points redeemed: ${pointsRedeemed.length}, Card installed: ${cardInstalled.length}, teléfonos únicos: ${cardInstalledUniqueCount}, sin teléfono: ${cardInstalledWithoutPhone}`);
 
         // Totales de puntos
         const totalPointsEarned = pointsEarned.reduce((sum, op) => {
@@ -149,7 +220,9 @@ async function searchServipremia() {
             totalOps: rewardixOps.length,
             pointsEarnedCount: pointsEarned.length,
             pointsRedeemedCount: pointsRedeemed.length,
-            cardInstalledCount: cardInstalled.length,
+            cardInstalledCount: cardInstalledUniqueCount,
+            cardInstalledRawCount: cardInstalled.length,
+            cardInstalledWithoutPhone,
             totalPointsEarned,
             totalPointsRedeemed,
             desglosePorSucursal,
@@ -426,7 +499,7 @@ function renderServipremiaResults(data) {
                 <div class="stat-number">${cardInstalledCount.toLocaleString('es-MX')}</div>
                 <div class="stat-label">💳 Card Installed</div>
                 <div style="font-size:0.7rem; margin-top:6px; opacity:0.9;">
-                    Registros nuevos en el periodo
+                    Teléfonos únicos en el periodo
                 </div>
             </div>
         </div>
@@ -612,7 +685,7 @@ function exportarServipremiaToExcel() {
         ['Puntos Ganados', totalPointsEarned],
         ['Transacciones Puntos Canjeados', pointsRedeemedCount],
         ['Puntos Canjeados', totalPointsRedeemed],
-        ['Card Installed - Registros nuevos', cardInstalledCount],
+        ['Card Installed - Teléfonos únicos', cardInstalledCount],
         ['Tasa de Canje (%)', porcentajeCanjeados.toFixed(2)],
         [],
         ['DESGLOSE POR SUCURSAL'],
