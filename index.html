@@ -201,6 +201,11 @@
                 <div class="card-title">Inventario Sucursal</div>
             </div>
 
+            <div class="nav-card" data-module="buscarSerie">
+                <div class="card-icon">🔎</div>
+                <div class="card-title">Buscar de Series</div>
+            </div>
+
             <div class="nav-card" data-module="tae">
                 <div class="card-icon">📊</div>
                 <div class="card-title">TAE</div>
@@ -350,6 +355,32 @@
                     </button>
 
                     <div id="inventarioSucursalResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MÓDULO: TRAZABILIDAD DE SERIES / IMEI / ICCID -->
+        <div id="buscarSerieModule" class="module">
+            <div class="card">
+                <div class="card-header">
+                    <h2>🔎 Trazabilidad de Serie, IMEI o ICCID</h2>
+                </div>
+                <div class="card-body">
+                    <div id="buscarSerieErrorAlert" class="alert alert-error" role="alert"></div>
+                    <div id="buscarSerieInfoAlert" class="alert alert-info" role="status"></div>
+                    <p style="color: #64748b; margin-bottom: 16px;">
+                        Consulta el estado y los movimientos del equipo, y busca el folio de venta asociado.
+                    </p>
+                    <form id="buscarSerieForm" class="date-button-group">
+                        <div class="date-input" style="flex: 2;">
+                            <label for="buscarSerieInput">📱 Serie, IMEI o ICCID:</label>
+                            <input type="search" id="buscarSerieInput" placeholder="Escribe el identificador" autocomplete="off" required>
+                        </div>
+                        <div class="query-button">
+                            <button id="buscarSerieBtn" type="submit" class="btn-tae">🔍 Consultar</button>
+                        </div>
+                    </form>
+                    <div id="buscarSerieResults" style="display: none; margin-top: 20px;" aria-live="polite"></div>
                 </div>
             </div>
         </div>
@@ -1190,6 +1221,7 @@
     <script src="js/modules/resumen_general.js"></script>
     <script src="js/modules/inventario_sucursal.js"></script>
     <script src="js/modules/servipremia.js"></script>
+    <script src="js/modules/buscar_serie.js"></script>
 
 
 </body>
