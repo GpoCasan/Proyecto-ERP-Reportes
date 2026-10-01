@@ -22,15 +22,23 @@
         return [];
     }
 
-    function utcDateFrom(value) {
+    function localDateFrom(value) {
         const date = new Date(value);
-        return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+        if (Number.isNaN(date.getTime())) return null;
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
 
-    function nextUtcDate(day) {
-        const date = new Date(`${day}T00:00:00.000Z`);
-        date.setUTCDate(date.getUTCDate() + 1);
-        return date.toISOString().slice(0, 10);
+    function nextLocalDate(dayString) {
+        const [year, month, day] = dayString.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        date.setDate(date.getDate() + 1);
+        const nextYear = date.getFullYear();
+        const nextMonth = String(date.getMonth() + 1).padStart(2, '0');
+        const nextDay = String(date.getDate()).padStart(2, '0');
+        return `${nextYear}-${nextMonth}-${nextDay}`;
     }
 
     function buildSalesSearchCandidates(logs) {
@@ -39,7 +47,7 @@
 
         for (const log of list) {
             const saleTypes = saleTypesForMovement(log?.type);
-            const day = utcDateFrom(log?.created_at);
+            const day = localDateFrom(log?.created_at);
             if (!day || saleTypes.length === 0) continue;
 
             for (const saleType of saleTypes) {
@@ -59,7 +67,7 @@
         if (result.length === 0) {
             for (const log of list) {
                 if (!normalizeMovementType(log?.type).includes('cancel')) continue;
-                const day = utcDateFrom(log?.created_at);
+                const day = localDateFrom(log?.created_at);
                 if (!day) continue;
                 for (const saleType of ['credit', 'products']) {
                     const key = `${saleType}|${day}`;
@@ -123,7 +131,7 @@
     }
 
     async function searchSalesForCandidate(candidate, identifier, state, productId) {
-        const endDate = nextUtcDate(candidate.day);
+        const endDate = nextLocalDate(candidate.day);
 
         for (let page = 1; page <= MAX_PAGES_PER_SEARCH; page += 1) {
             const params = new URLSearchParams({
@@ -131,7 +139,7 @@
                 per_page: String(PAGE_SIZE),
                 sale_type: candidate.saleType,
                 start_date: `${candidate.day} 00:00:00`,
-                end_date: `${endDate} 00:00:00`
+                end_date: `${endDate} 23:59:59`
             });
             const numericProductId = Number(productId);
             if (Number.isInteger(numericProductId) && numericProductId > 0) {
@@ -303,7 +311,7 @@
         const section = element('div');
         section.style.marginTop = '16px';
         section.appendChild(element('h3', '', `Historial de movimientos (${logs.length})`));
-        
+        section.appendChild(element('small', '', 'Orden cronológico: del más antiguo al más reciente.'));
 
         if (logs.length === 0) {
             section.appendChild(element('p', '', 'No hay movimientos registrados para este identificador.'));
@@ -347,7 +355,7 @@
         const summary = element('div', 'grid-2cols');
         const inventoryCard = element('div', 'analysis-card-info');
         inventoryCard.appendChild(element('h4', '', 'Estado actual'));
-        //appendInfoRow(inventoryCard, 'Identificador', identifier);
+        appendInfoRow(inventoryCard, 'Identificador', identifier);
         //appendInfoRow(inventoryCard, 'Estado', displayStatus(record.status));
         appendInfoRow(inventoryCard, 'Producto', product.name || 'No disponible');
         appendInfoRow(inventoryCard, 'Sucursal / almacén', warehouseName(stock.warehouse));
