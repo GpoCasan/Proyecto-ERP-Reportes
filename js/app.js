@@ -1,6 +1,11 @@
 // ==================== APLICACIÓN PRINCIPAL ====================
 
 function switchModule(moduleName) {
+    if (moduleName === 'adminDashboard') {
+        let storedUser = null;
+        try { storedUser = JSON.parse(sessionStorage.getItem('servicel_user') || 'null'); } catch (_) {}
+        if (!storedUser || storedUser.role !== 'admin') return;
+    }
     document.querySelectorAll('.module').forEach(m => m.classList.remove('active-module'));
     const targetModule = document.getElementById(`${moduleName}Module`);
     if (targetModule) {
@@ -15,6 +20,103 @@ function switchModule(moduleName) {
     // Disparar evento personalizado para la alerta de transferencias
     const event = new CustomEvent('moduleChanged', { detail: { module: moduleName } });
     document.dispatchEvent(event);
+}
+
+function setAdminDashboardView(view, userOverride) {
+    let user = userOverride;
+    if (user === undefined) {
+        try { user = JSON.parse(sessionStorage.getItem('servicel_user') || 'null'); } catch (_) { user = null; }
+    }
+    const isAdmin = !!(user && user.role === 'admin');
+    const navCards = document.querySelector('.nav-cards');
+    const dashboard = document.getElementById('adminDashboardModule');
+    const controls = document.getElementById('adminDashboardControls');
+    const showCardsButton = document.getElementById('adminShowCardsBtn');
+    const showDashboardButton = document.getElementById('adminShowDashboardBtn');
+
+    if (view === 'reset') {
+        const compareToggle = document.getElementById('adminDashCompareToggle');
+        if (compareToggle) compareToggle.checked = false;
+        if (typeof window.setAdminDashboardCompareMode === 'function') window.setAdminDashboardCompareMode(false);
+        if (dashboard) {
+            dashboard.classList.remove('active-module');
+            dashboard.style.display = 'none';
+        }
+        if (navCards) navCards.style.display = '';
+        if (controls) controls.style.display = 'none';
+        return true;
+    }
+
+    if (view === 'dashboard' && !isAdmin) return false;
+    if (!dashboard || !navCards) return false;
+
+    if (view === 'dashboard') {
+        navCards.style.display = 'none';
+        dashboard.style.display = '';
+        switchModule('adminDashboard');
+        if (controls) controls.style.display = 'flex';
+        if (showCardsButton) showCardsButton.style.display = 'inline-flex';
+        if (showDashboardButton) showDashboardButton.style.display = 'none';
+        if (typeof window.loadAdminDashboard === 'function') window.loadAdminDashboard();
+        return true;
+    }
+
+    dashboard.classList.remove('active-module');
+    dashboard.style.display = 'none';
+    navCards.style.display = '';
+    if (controls) controls.style.display = isAdmin ? 'flex' : 'none';
+    if (showCardsButton) showCardsButton.style.display = 'none';
+    if (showDashboardButton) showDashboardButton.style.display = isAdmin ? 'inline-flex' : 'none';
+
+    const allowedModules = Array.isArray(user && user.modules) ? user.modules : [];
+    const firstModule = allowedModules.find(name => {
+        const card = document.querySelector(`.nav-card[data-module="${name}"]`);
+        return card && card.style.display !== 'none';
+    });
+    if (firstModule) switchModule(firstModule);
+    return true;
+}
+
+function initAdminDashboardControls() {
+    const showCardsButton = document.getElementById('adminShowCardsBtn');
+    const showDashboardButton = document.getElementById('adminShowDashboardBtn');
+    const compareButton = document.getElementById('adminDashCompareButton');
+    const compareToggle = document.getElementById('adminDashCompareToggle');
+    const refreshButton = document.getElementById('adminDashboardRefreshBtn');
+    if (showCardsButton) showCardsButton.addEventListener('click', () => setAdminDashboardView('cards'));
+    if (showDashboardButton) showDashboardButton.addEventListener('click', () => setAdminDashboardView('dashboard'));
+    if (refreshButton) refreshButton.addEventListener('click', () => {
+        if ((!compareToggle || !compareToggle.checked) && typeof window.loadAdminDashboard === 'function') window.loadAdminDashboard({ forceRefresh: true });
+    });
+    if (compareButton) compareButton.addEventListener('click', () => {
+        if (typeof window.loadAdminDashboard === 'function') window.loadAdminDashboard({ explicitCompare: true });
+    });
+}
+
+function initDashboardMonthControls() {
+    const primaryMonth = document.getElementById('adminDashPrimaryMonth');
+    const secondMonth = document.getElementById('adminDashSecondMonth');
+    const compareToggle = document.getElementById('adminDashCompareToggle');
+    if (primaryMonth) primaryMonth.addEventListener('change', () => {
+        if (compareToggle && compareToggle.checked) {
+            if (typeof window.markAdminDashboardComparisonPending === 'function') window.markAdminDashboardComparisonPending();
+        } else if (typeof window.loadAdminDashboard === 'function') {
+            window.loadAdminDashboard();
+        }
+    });
+    if (secondMonth) secondMonth.addEventListener('change', () => {
+        if (compareToggle && compareToggle.checked && typeof window.markAdminDashboardComparisonPending === 'function') {
+            window.markAdminDashboardComparisonPending();
+        }
+    });
+    if (compareToggle) compareToggle.addEventListener('change', () => {
+        if (typeof window.setAdminDashboardCompareMode === 'function') {
+            window.setAdminDashboardCompareMode(compareToggle.checked);
+        }
+        if (!compareToggle.checked && typeof window.loadAdminDashboard === 'function') {
+            window.loadAdminDashboard();
+        }
+    });
 }
 
 // Inicializar eventos de navegación
@@ -132,20 +234,16 @@ function setDefaultDates() {
         margenEndDate.value = endDateTransfer.toISOString().split('T')[0];
     }
 
-    // Fechas por defecto para Servipremia (últimos 7 días)
-    const servipremiaEndDate = new Date();
-    const servipremiaStartDate = new Date();
-    servipremiaStartDate.setDate(servipremiaStartDate.getDate() - 6);
-    const servipremiaStartEl = document.getElementById('servipremiaStartDate');
-    const servipremiaEndEl = document.getElementById('servipremiaEndDate');
+    // Servipremia consulta un solo día calendario local.
+    const servipremiaDate = new Date();
+    const servipremiaDateEl = document.getElementById('servipremiaDate');
     const fmt = (d) => {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const dd = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${dd}`;
     };
-    if (servipremiaStartEl) servipremiaStartEl.value = fmt(servipremiaStartDate);
-    if (servipremiaEndEl) servipremiaEndEl.value = fmt(servipremiaEndDate);
+    if (servipremiaDateEl) servipremiaDateEl.value = fmt(servipremiaDate);
 }
 
 // Inicializar navegación de tarjetas
@@ -186,8 +284,8 @@ function initNavigation() {
                 setTimeout(initResumenGeneralModule, 100);
             }               
 
-            if (moduleName === 'servipremia' && typeof initServipremiaModule === 'function') {
-                setTimeout(initServipremiaModule, 100);
+            if (moduleName === 'servipremia' && typeof window.initServipremiaModule === 'function') {
+                setTimeout(window.initServipremiaModule, 100);
             }
         });
     });
@@ -419,6 +517,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     setDefaultDates();
     initNavigation();
+    initAdminDashboardControls();
+    initDashboardMonthControls();
     initBranchListeners();
     initTabs();
     initSaleSearchEvents();

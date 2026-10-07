@@ -8,7 +8,7 @@
 
     // ==================== CONSTANTES ====================
     const TIMBRES_ENDPOINT = 'https://sales.gcasan.com/api/nuberp/timbres';
-    const TIMBRES_CARD_ID = 'timbresCard';
+    const TIMBRES_INFO_ID = 'timbresInfo';
     const TIMBRES_VALUE_ID = 'timbresDisponibles';
     const ADVERTENCIA_CLASS = 'timbres-advertencia';
 
@@ -101,14 +101,16 @@
      * @param {Object} user - Objeto del usuario autenticado.
      */
     function mostrarTimbresSegunRol(user) {
-        const timbresCard = document.getElementById(TIMBRES_CARD_ID);
-        if (!timbresCard) return;
+        const timbresInfo = document.getElementById(TIMBRES_INFO_ID);
+        if (!timbresInfo) return;
 
         if (user && user.role === 'admin') {
-            timbresCard.style.display = 'flex';
+            timbresInfo.style.display = 'block';
             cargarTimbresFiscales();
         } else {
-            timbresCard.style.display = 'none';
+            timbresInfo.style.display = 'none';
+            const value = document.getElementById(TIMBRES_VALUE_ID);
+            if (value) value.textContent = '—';
         }
     }
 
@@ -155,9 +157,9 @@
         if (typeof originalLogout === 'function') {
             window.logout = function() {
                 originalLogout();
-                const timbresCard = document.getElementById(TIMBRES_CARD_ID);
-                if (timbresCard) {
-                    timbresCard.style.display = 'none';
+                const timbresInfo = document.getElementById(TIMBRES_INFO_ID);
+                if (timbresInfo) {
+                    timbresInfo.style.display = 'none';
                 }
             };
             console.log('[TIMBRES FISCALES] Hook en logout OK');
@@ -169,9 +171,9 @@
                 ? JSON.parse(sessionStorage.getItem('servicel_user')) 
                 : null;
             if (user && user.role === 'admin') {
-                const timbresCard = document.getElementById(TIMBRES_CARD_ID);
-                if (timbresCard && timbresCard.style.display !== 'flex') {
-                    timbresCard.style.display = 'flex';
+                const timbresInfo = document.getElementById(TIMBRES_INFO_ID);
+                if (timbresInfo && timbresInfo.style.display === 'none') {
+                    timbresInfo.style.display = 'block';
                     cargarTimbresFiscales();
                 }
             }

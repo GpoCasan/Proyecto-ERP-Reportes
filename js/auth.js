@@ -6,7 +6,7 @@ const USERS = {
         password: "admin2026",
         role: "admin",
         name: "Administrador",
-        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "transferencias_pendientes", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas", "analisis_margen","tae_apps","inventarioAccesorios","boletos_erp","resumenGeneral","inventarioSucursal","servipremia","buscarSerie"],
+        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias", "transferencias", "transferencias_pendientes", "tae", "ventasTotales", "servicios", "ingresos", "credito", "compras", "facturas", "analisis_margen","tae_apps","inventarioAccesorios","boletos_erp","resumenGeneral","inventarioSucursal","servipremia","buscar_serie", "buscarSerie"],
         showTaeBalance: true
     },
     "comercial": {
@@ -113,8 +113,11 @@ function updateUIForUser(user) {
     
     // Mostrar/ocultar el SALDO TAE según permisos
     updateTaeBalanceVisibility(user);
-    
-    
+
+    // El administrador aterriza en el dashboard; los demás perfiles conservan su vista de tarjetas.
+    if (typeof setAdminDashboardView === 'function') {
+        setAdminDashboardView(user && user.role === 'admin' ? 'dashboard' : 'cards', user);
+    }
 }
 
 // Función para cerrar sesión
@@ -122,6 +125,7 @@ function logout() {
     currentUser = null;
     sessionStorage.removeItem('servicel_user');
     alertaTransferenciasMostrada = false;
+    if (typeof setAdminDashboardView === 'function') setAdminDashboardView('reset', null);
     
     // Ocultar barra de usuario
     const userBar = document.getElementById('userInfoBar');

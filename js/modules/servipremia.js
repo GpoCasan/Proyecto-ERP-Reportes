@@ -511,17 +511,23 @@ async function fetchRewardixOperations(startDate, endDate) {
             allOperations.push(...rows);
 
             if (payload.meta && payload.meta.totalItems !== undefined) {
-                totalItems = Number(payload.meta.totalItems);
+                const parsedTotal = Number(payload.meta.totalItems);
+                totalItems = Number.isFinite(parsedTotal) ? parsedTotal : null;
             }
 
-            if (!rows.length || rows.length < itemsPerPage) break;
-            if (Number.isFinite(totalItems) && allOperations.length >= totalItems) break;
-
-            page++;
-            if (page > 100) {
-                console.warn('⚠️ Demasiadas páginas, deteniendo por seguridad');
+            if (!rows.length) {
+                if (Number.isFinite(totalItems) && allOperations.length < totalItems) {
+                    throw new Error(`Rewardix devolvió una página vacía antes de completar ${totalItems} operaciones.`);
+                }
                 break;
             }
+            if (Number.isFinite(totalItems) && allOperations.length >= totalItems) break;
+            // Si el API expone el total, úsalo antes que el tamaño de página: algunos
+            // proxies limitan itemsPerPage y devolverán menos de 1000 aun teniendo más datos.
+            if (!Number.isFinite(totalItems) && rows.length < itemsPerPage) break;
+
+            page++;
+            if (page > 100) throw new Error('Rewardix excedió el límite de 100 páginas; la consulta quedó incompleta.');
         }
 
         console.log(`✅ [SERVIPREMIA] ${allOperations.length} operaciones obtenidas`);

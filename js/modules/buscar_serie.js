@@ -284,7 +284,7 @@
         section.appendChild(element('h4', '', 'Folios de venta relacionados'));
 
         if (lookup.sales.length > 0) {
-            //section.appendChild(element('p', '', `Coincidencias encontradas: ${lookup.sales.length}`));
+            section.appendChild(element('p', '', `Coincidencias encontradas: ${lookup.sales.length}`));
             for (const sale of lookup.sales) {
                 const row = element('div', 'analysis-row');
                 row.appendChild(createSaleLink(sale));
@@ -356,10 +356,10 @@
         const inventoryCard = element('div', 'analysis-card-info');
         inventoryCard.appendChild(element('h4', '', 'Estado actual'));
         appendInfoRow(inventoryCard, 'Identificador', identifier);
-        //appendInfoRow(inventoryCard, 'Estado', displayStatus(record.status));
+        appendInfoRow(inventoryCard, 'Estado', displayStatus(record.status));
         appendInfoRow(inventoryCard, 'Producto', product.name || 'No disponible');
         appendInfoRow(inventoryCard, 'Sucursal / almacén', warehouseName(stock.warehouse));
-        //appendInfoRow(inventoryCard, 'Existencia actual', stock.quantity ?? 'No disponible');
+        appendInfoRow(inventoryCard, 'Existencia actual', stock.quantity ?? 'No disponible');
         appendInfoRow(inventoryCard, 'Última actualización', formatDateTime(record.updated_at));
         summary.appendChild(inventoryCard);
         results.appendChild(summary);
