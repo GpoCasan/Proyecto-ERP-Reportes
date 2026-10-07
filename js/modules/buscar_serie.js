@@ -311,7 +311,7 @@
         const section = element('div');
         section.style.marginTop = '16px';
         section.appendChild(element('h3', '', `Historial de movimientos (${logs.length})`));
-        section.appendChild(element('small', '', 'Orden cronológico: del más antiguo al más reciente.'));
+        //section.appendChild(element('small', '', 'Orden cronológico: del más antiguo al más reciente.'));
 
         if (logs.length === 0) {
             section.appendChild(element('p', '', 'No hay movimientos registrados para este identificador.'));
