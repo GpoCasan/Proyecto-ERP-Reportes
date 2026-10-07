@@ -1,11 +1,13 @@
 const REWARDIX_BASE_URL = 'https://api-pymes.rewardix.com/api/v2';
 
-const ALLOWED_RESOURCES = new Set(['operations', 'managers']);
+// Recursos de solo lectura que necesita el ERP. No se exponen rutas de escritura.
+const ALLOWED_RESOURCES = new Set(['operations', 'managers', 'cards']);
 const ALLOWED_QUERY_PARAMS = new Set([
   'page',
   'itemsPerPage',
   'startDate',
-  'endDate'
+  'endDate',
+  'cardId'
 ]);
 
 function getAllowedOrigin(requestOrigin) {
