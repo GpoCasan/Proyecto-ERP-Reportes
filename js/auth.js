@@ -13,7 +13,7 @@ const USERS = {
         password: "comercial2026",
         role: "comercial",
         name: "Comercial",
-        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias","inventarioAccesorios","boletos_erp","servipremia","auditoriaRegistroVentas"],
+        modules: ["contado", "credito_nuevo", "accesorios", "inventario", "simexpress", "existencias","inventarioAccesorios","boletos_erp","servipremia", "auditoriaRegistroVentas"],
         showTaeBalance: false
     },
     "operaciones": {
@@ -211,9 +211,18 @@ function checkExistingSession() {
     if (savedUser) {
         try {
             const user = JSON.parse(savedUser);
-            // Verificar que el usuario aún existe en la configuración
-            if (USERS[user.username]) {
-                currentUser = user;
+            // Recargar permisos actuales desde la configuración. Así los permisos
+            // modificados no quedan bloqueados por una sesión guardada antigua.
+            const configuredUser = USERS[user.username];
+            if (configuredUser) {
+                currentUser = {
+                    ...user,
+                    role: configuredUser.role,
+                    name: configuredUser.name,
+                    modules: configuredUser.modules,
+                    showTaeBalance: configuredUser.showTaeBalance || false
+                };
+                sessionStorage.setItem('servicel_user', JSON.stringify(currentUser));
                 
                 // Ocultar login
                 const loginOverlay = document.getElementById('loginOverlay');

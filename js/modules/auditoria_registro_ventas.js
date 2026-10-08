@@ -23,10 +23,11 @@
     ];
     let isLoading = false;
 
-    function isAdmin() {
+    function canAccessAudit() {
         try {
             const user = JSON.parse(sessionStorage.getItem('servicel_user') || 'null');
-            return !!(user && user.role === 'admin');
+            return !!(user && ['admin', 'comercial'].includes(user.role)
+                && Array.isArray(user.modules) && user.modules.includes(MODULE_KEY));
         } catch (_) {
             return false;
         }
@@ -430,8 +431,8 @@
 
     async function querySelectedDay() {
         if (isLoading) return;
-        if (!isAdmin()) {
-            showAuditError('Este informe está disponible únicamente para el usuario administrador.');
+        if (!canAccessAudit()) {
+            showAuditError('Este informe está disponible solo para administrador o Comercial con el permiso asignado.');
             return;
         }
         const dateInput = document.getElementById(DATE_ID);
@@ -485,7 +486,7 @@
     }
 
     function initAuditoriaRegistroVentas() {
-        if (!isAdmin()) return;
+        if (!canAccessAudit()) return;
         const dateInput = document.getElementById(DATE_ID);
         const button = document.getElementById(BUTTON_ID);
         if (!dateInput || !button) return;

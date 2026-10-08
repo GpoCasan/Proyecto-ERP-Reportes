@@ -4,7 +4,13 @@ function switchModule(moduleName) {
     if (moduleName === 'adminDashboard' || moduleName === 'auditoriaRegistroVentas') {
         let storedUser = null;
         try { storedUser = JSON.parse(sessionStorage.getItem('servicel_user') || 'null'); } catch (_) {}
-        if (!storedUser || storedUser.role !== 'admin') return;
+        if (moduleName === 'adminDashboard' && (!storedUser || storedUser.role !== 'admin')) return;
+        if (moduleName === 'auditoriaRegistroVentas') {
+            const allowedRole = storedUser && ['admin', 'comercial'].includes(storedUser.role);
+            const hasModulePermission = storedUser && Array.isArray(storedUser.modules)
+                && storedUser.modules.includes('auditoriaRegistroVentas');
+            if (!allowedRole || !hasModulePermission) return;
+        }
     }
     document.querySelectorAll('.module').forEach(m => m.classList.remove('active-module'));
     const targetModule = document.getElementById(`${moduleName}Module`);
