@@ -1,7 +1,7 @@
 // ==================== APLICACIÓN PRINCIPAL ====================
 
 function switchModule(moduleName) {
-    if (moduleName === 'adminDashboard') {
+    if (moduleName === 'adminDashboard' || moduleName === 'auditoriaRegistroVentas') {
         let storedUser = null;
         try { storedUser = JSON.parse(sessionStorage.getItem('servicel_user') || 'null'); } catch (_) {}
         if (!storedUser || storedUser.role !== 'admin') return;
@@ -286,6 +286,9 @@ function initNavigation() {
 
             if (moduleName === 'servipremia' && typeof window.initServipremiaModule === 'function') {
                 setTimeout(window.initServipremiaModule, 100);
+            }
+            if (moduleName === 'auditoriaRegistroVentas' && typeof window.initAuditoriaRegistroVentas === 'function') {
+                setTimeout(window.initAuditoriaRegistroVentas, 100);
             }
         });
     });

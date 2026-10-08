@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>SERVICEL - Sistema de Reportes</title>
-    <link rel="stylesheet" href="css/styles.css?v=9">
+    <link rel="stylesheet" href="css/styles.css?v=10">
 </head>
 <body>
     <!-- Modal de Login -->
@@ -353,6 +353,11 @@
             <div class="nav-card" data-module="servipremia">
                 <div class="card-icon">🎁</div>
                 <div class="card-title">Servipremia</div>
+            </div>
+
+            <div class="nav-card" data-module="auditoriaRegistroVentas">
+                <div class="card-icon">⏱️</div>
+                <div class="card-title">Auditoría de captura</div>
             </div>
         
         </div>
@@ -1288,6 +1293,34 @@
                 </div>
             </div>
 
+        <!-- MÓDULO: AUDITORÍA DIARIA DE CAPTURA DE VENTAS -->
+        <div id="auditoriaRegistroVentasModule" class="module">
+            <div class="card">
+                <div class="card-header"><h2>⏱️ Auditoría diaria de captura de ventas</h2></div>
+                <div class="card-body">
+                    <div id="auditRegistroError" class="alert alert-error" style="display:none;" role="alert"></div>
+                    <p class="audit-intro">Analiza la hora de registro de las ventas por asesor, sucursal y turno para encontrar bloques concentrados que convenga revisar.</p>
+                    <div class="date-button-group">
+                        <div class="date-input">
+                            <label for="auditRegistroFecha">📅 Día a revisar</label>
+                            <input type="date" id="auditRegistroFecha">
+                        </div>
+                        <div class="query-button">
+                            <button id="auditRegistroConsultar" type="button" class="btn-tae" style="width:100%;padding:12px;">🔍 Analizar día</button>
+                        </div>
+                    </div>
+                    <div id="auditRegistroProgreso" class="audit-progress" style="display:none;" role="status" aria-live="polite" aria-busy="true">
+                        <div class="audit-progress-heading"><strong id="auditRegistroProgresoTitulo">Consultando ventas del día</strong><span id="auditRegistroProgresoPct">0%</span></div>
+                        <div id="auditRegistroProgresoTrack" class="audit-progress-track" role="progressbar" aria-label="Avance de la consulta diaria" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                            <div id="auditRegistroProgresoBar" class="audit-progress-bar"></div>
+                        </div>
+                        <div id="auditRegistroProgresoDetalle" class="audit-progress-detail"></div>
+                    </div>
+                    <div id="auditRegistroResultados" style="display:none;margin-top:18px;"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- FOOTER -->
         <footer class="footer">
             <p>© Copyright - SADECO 2026</p>
@@ -1299,7 +1332,7 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
-    <script src="js/auth.js"></script>
+    <script src="js/auth.js?v=2"></script>
     <script src="js/modules/contado.js"></script>
     <script src="js/modules/credito_nuevo.js"></script>
     <script src="js/modules/existencias.js"></script>
@@ -1314,7 +1347,7 @@
     <script src="js/modules/simexpress.js"></script>
     <script src="js/modules/compras.js"></script>
     <script src="js/modules/facturas.js"></script>
-    <script src="js/app.js?v=2"></script>
+    <script src="js/app.js?v=3"></script>
     <script src="js/modules/tae_apps.js"></script>
     <script src="js/modules/analisis_margen.js"></script>
     <script src="js/alertas_transferencias.js"></script>
@@ -1328,6 +1361,7 @@
     <script src="js/modules/servipremia_diario.js?v=4"></script>
     <script src="js/modules/buscar_serie.js"></script>
     <script src="js/modules/dashboard_admin.js?v=8"></script>
+    <script src="js/modules/auditoria_registro_ventas.js?v=1"></script>
 
 
 </body>
