@@ -6,11 +6,12 @@
 (function () {
     'use strict';
 
-    const PAGE_SIZE = 100;
+    const PAGE_SIZE = 200;
     const MAX_PAGES = 100;
     const DATE_INPUT_ID = 'servipremiaDate';
     const RESULTS_ID = 'servipremiaResults';
     const BUTTON_ID = 'searchServipremiaBtn';
+    const PROGRESS_ID = 'servipremiaDailyProgress';
     const REWARDIX_PAGE_SIZE = 1000;
     const REWARDIX_MAX_PAGES = 100;
     const CARD_CATALOG_TTL_MS = 5 * 60 * 1000;
@@ -67,23 +68,25 @@
         return { start: apiDateTime(start), end: apiDateTime(end) };
     }
 
-    function buildSalesUrl(page, range) {
+    function buildSalesUrl(page, range, pageSize = PAGE_SIZE) {
         const url = new URL(CONFIG.API_SALES);
         url.searchParams.set('page', String(page));
-        url.searchParams.set('per_page', String(PAGE_SIZE));
+        url.searchParams.set('per_page', String(pageSize));
         url.searchParams.set('total', '0');
         url.searchParams.set('start_date', range.start);
         url.searchParams.set('end_date', range.end);
         return url.toString();
     }
 
-    async function fetchSalesForDay(dateValue) {
+    async function fetchSalesForDay(dateValue, onPageProgress) {
         const range = getSingleDayRange(dateValue);
         const allSales = [];
         let page = 1;
+        let pageSize = PAGE_SIZE;
+        let reportedTotal = null;
 
         while (page <= MAX_PAGES) {
-            const url = buildSalesUrl(page, range);
+            const url = buildSalesUrl(page, range, pageSize);
             const response = await fetch(url, {
                 headers: {
                     Authorization: `Bearer ${CONFIG.FIXED_TOKEN}`,
@@ -91,32 +94,54 @@
                 },
                 cache: 'no-store'
             });
-            if (!response.ok) throw new Error(`Ventas ERP respondió HTTP ${response.status}.`);
+            if (!response.ok) {
+                if (page === 1 && pageSize > 100 && [400, 422].includes(response.status)) {
+                    pageSize = 100;
+                    if (typeof onPageProgress === 'function') {
+                        onPageProgress({ stage: 'sales', loaded: 0, total: null, page: 1, totalPages: null, pageSize, fallbackPageSize: true, sales: allSales });
+                    }
+                    continue;
+                }
+                throw new Error(`Ventas ERP respondió HTTP ${response.status}.`);
+            }
 
             const payload = await response.json();
             const rows = Array.isArray(payload.data) ? payload.data : [];
             allSales.push(...rows);
 
+            const totalValue = payload.meta && payload.meta.total;
+            const parsedTotal = Number.parseInt(totalValue, 10);
+            reportedTotal = totalValue !== undefined && totalValue !== null && totalValue !== ''
+                && Number.isFinite(parsedTotal) && parsedTotal >= 0 ? parsedTotal : null;
             const pageValue = payload.last_page ||
                 (payload.meta && payload.meta.last_page) ||
                 (payload.pagination && payload.pagination.last_page);
             const lastPage = Number.parseInt(pageValue, 10);
+            const totalPages = Number.isFinite(lastPage) && lastPage > 0
+                ? lastPage
+                : reportedTotal !== null ? Math.max(1, Math.ceil(reportedTotal / pageSize)) : null;
+
+            if (typeof onPageProgress === 'function') {
+                onPageProgress({
+                    stage: 'sales', loaded: allSales.length, total: reportedTotal,
+                    page, totalPages, pageSize, sales: allSales
+                });
+            }
+
             if (Number.isFinite(lastPage) && lastPage > 0) {
                 if (page >= lastPage) break;
             } else {
-                const totalValue = payload.meta && payload.meta.total;
-                const total = Number.parseInt(totalValue, 10);
-                if (Number.isFinite(total) && total > 0 && allSales.length >= total) break;
-                if (rows.length < PAGE_SIZE) break;
+                if (reportedTotal !== null && allSales.length >= reportedTotal) break;
+                if (rows.length < pageSize) break;
             }
             page += 1;
         }
 
         if (page > MAX_PAGES) throw new Error(`La consulta excedió ${MAX_PAGES} páginas para un solo día.`);
-        return { sales: allSales, range };
+        return { sales: allSales, range, total: reportedTotal, pageSize };
     }
 
-    async function fetchRewardixCollection(resource, filters) {
+    async function fetchRewardixCollection(resource, filters, onPageProgress) {
         if (typeof getRewardixUrl !== 'function') throw new Error('No está configurada la conexión con Rewardix.');
         const baseUrl = String(getRewardixUrl()).replace(/\/+$/, '');
         const allRows = [];
@@ -147,6 +172,12 @@
             totalItems = totalValue !== undefined && totalValue !== null && totalValue !== '' && Number.isFinite(parsedTotal)
                 ? parsedTotal
                 : null;
+            const totalPages = totalItems !== null
+                ? Math.max(1, Math.ceil(totalItems / REWARDIX_PAGE_SIZE))
+                : null;
+            if (typeof onPageProgress === 'function') {
+                onPageProgress({ stage: resource === 'cards' ? 'cards' : 'history', loaded: allRows.length, total: totalItems, page, totalPages });
+            }
 
             if (!rows.length) {
                 if (totalItems !== null && allRows.length < totalItems) {
@@ -164,13 +195,16 @@
         return allRows;
     }
 
-    function fetchRewardixCardCatalog() {
+    function fetchRewardixCardCatalog(onPageProgress) {
         if (Array.isArray(cardCatalogCache) && Date.now() - cardCatalogCacheAt < CARD_CATALOG_TTL_MS) {
+            if (typeof onPageProgress === 'function') {
+                onPageProgress({ stage: 'cards', loaded: cardCatalogCache.length, total: cardCatalogCache.length, page: 1, totalPages: 1, cached: true });
+            }
             return Promise.resolve(cardCatalogCache);
         }
         if (cardCatalogPromise) return cardCatalogPromise;
 
-        cardCatalogPromise = fetchRewardixCollection('cards')
+        cardCatalogPromise = fetchRewardixCollection('cards', {}, onPageProgress)
             .then(rows => {
                 cardCatalogCache = rows;
                 cardCatalogCacheAt = Date.now();
@@ -535,6 +569,129 @@
         }).format(numberValue(value));
     }
 
+    function renderSalesProgressPreview(sales) {
+        const rows = Array.isArray(sales) ? sales : [];
+        const advisors = new Map();
+        let amount = 0;
+        let accruedOperations = 0;
+        let pointsEarned = 0;
+        let pointsRedeemed = 0;
+
+        rows.forEach(sale => {
+            if (!sale) return;
+            amount += numberValue(sale.total);
+            const points = effectivePoints(sale);
+            pointsEarned += points.earned;
+            pointsRedeemed += points.redeemed;
+            if (isTrue(sale.is_cancelled)) return;
+
+            const user = sale.user && typeof sale.user === 'object' ? sale.user : {};
+            const name = String(user.name || sale.user_name || 'Asesor no identificado').trim();
+            const key = sale.user_id || user.id ? `id:${sale.user_id || user.id}` : `name:${normalizeName(name)}`;
+            if (!advisors.has(key)) advisors.set(key, { name, operations: 0, accrued: 0, amount: 0, pointsEarned: 0, pointsRedeemed: 0 });
+            const advisor = advisors.get(key);
+            advisor.operations += 1;
+            advisor.amount += numberValue(sale.total);
+            advisor.pointsEarned += points.earned;
+            advisor.pointsRedeemed += points.redeemed;
+            if (points.earned > 0) {
+                advisor.accrued += 1;
+                accruedOperations += 1;
+            }
+        });
+
+        const topAdvisors = Array.from(advisors.values())
+            .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, 'es-MX'))
+            .slice(0, 8);
+        const advisorRows = topAdvisors.map(row => `<tr>
+            <td>${escapeHtml(row.name)}</td>
+            <td style="text-align:right;">${row.operations.toLocaleString('es-MX')}</td>
+            <td style="text-align:right;">${row.accrued.toLocaleString('es-MX')}</td>
+            <td style="text-align:right;">${formatCurrency(row.amount)}</td>
+            <td style="text-align:right;">${formatPoints(row.pointsEarned)}</td>
+            <td style="text-align:right;">${formatPoints(row.pointsRedeemed)}</td>
+        </tr>`).join('');
+
+        return `<div class="servipremia-partial-summary">
+            <div><span>Ventas ERP recibidas</span><strong>${rows.length.toLocaleString('es-MX')}</strong></div>
+            <div><span>Monto parcial</span><strong>${formatCurrency(amount)}</strong></div>
+            <div><span>Operaciones con acumulación</span><strong>${accruedOperations.toLocaleString('es-MX')}</strong></div>
+            <div><span>Puntos acumulados (parcial)</span><strong>${formatPoints(pointsEarned)}</strong></div>
+            <div><span>Puntos canjeados (parcial)</span><strong>${formatPoints(pointsRedeemed)}</strong></div>
+        </div>
+        <div class="servipremia-partial-advisors"><strong>Avance por asesor (provisional; hasta 8 principales)</strong>
+            ${advisorRows ? `<div class="table-container"><table class="imei-table"><thead><tr><th>Asesor</th><th style="text-align:right;">Operaciones</th><th style="text-align:right;">Ops. con acumulación</th><th style="text-align:right;">Ventas</th><th style="text-align:right;">Puntos acumulados</th><th style="text-align:right;">Puntos canjeados</th></tr></thead><tbody>${advisorRows}</tbody></table></div>` : '<div class="servipremia-progress-empty">Esperando ventas para mostrar el desglose…</div>'}
+        </div>`;
+    }
+
+    function updateDailyProgress(state) {
+        const root = document.getElementById(PROGRESS_ID);
+        if (!root) return;
+        const title = document.getElementById('servipremiaDailyProgressTitle');
+        const track = document.getElementById('servipremiaDailyProgressTrack');
+        const bar = document.getElementById('servipremiaDailyProgressBar');
+        const percentLabel = document.getElementById('servipremiaDailyProgressPercent');
+        const detail = document.getElementById('servipremiaDailyProgressDetail');
+        const partial = document.getElementById('servipremiaDailyPartialData');
+        const labels = {
+            sales: 'Consultando ventas del ERP',
+            cards: 'Consultando tarjetas y perfiles Rewardix',
+            operations: 'Consultando movimientos Rewardix',
+            error: 'Consulta detenida'
+        };
+        const bands = { sales: [0, 55], cards: [55, 75], operations: [75, 99] };
+        const loaded = Number(state.loaded) || 0;
+        const total = state.total === null || state.total === undefined ? null : Number(state.total);
+        let fraction = null;
+        if (total !== null && Number.isFinite(total)) fraction = total > 0 ? loaded / total : 1;
+        else if (Number(state.totalPages) > 0) fraction = (Number(state.page) || 0) / Number(state.totalPages);
+
+        let percentage = null;
+        if (state.stage === 'error') percentage = 100;
+        else if (state.stage === 'complete') percentage = 100;
+        else if (fraction !== null && bands[state.stage]) {
+            const [start, end] = bands[state.stage];
+            percentage = Math.round(start + (end - start) * Math.max(0, Math.min(1, fraction)));
+        }
+
+        root.style.display = 'block';
+        if (typeof root.setAttribute === 'function') root.setAttribute('aria-busy', state.stage === 'error' ? 'false' : 'true');
+        if (title) title.textContent = state.title || labels[state.stage] || 'Consultando…';
+        if (track && typeof track.setAttribute === 'function' && percentage !== null) {
+            track.setAttribute('aria-valuenow', String(percentage));
+        }
+        if (bar) {
+            bar.className = `servipremia-progress-bar${percentage === null ? ' is-indeterminate' : ''}${state.stage === 'error' ? ' is-error' : ''}`;
+            bar.style.width = percentage === null ? '38%' : `${percentage}%`;
+        }
+        if (percentLabel) percentLabel.textContent = percentage === null ? 'En curso' : `${percentage}%`;
+
+        let detailText = state.message || '';
+        if (!detailText && state.stage === 'sales') {
+            detailText = total === null
+                ? `${loaded.toLocaleString('es-MX')} ventas recibidas${state.page ? ` · página ${state.page}` : ''}${state.pageSize ? ` · ${state.pageSize} por página` : ''}`
+                : `${loaded.toLocaleString('es-MX')} de ${total.toLocaleString('es-MX')} ventas${state.totalPages ? ` · página ${state.page} de ${state.totalPages}` : ''}`;
+        } else if (!detailText && state.stage === 'cards') {
+            detailText = state.cached
+                ? `Catálogo en caché: ${loaded.toLocaleString('es-MX')} tarjetas`
+                : `${loaded.toLocaleString('es-MX')} tarjetas cargadas${total !== null ? ` de ${total.toLocaleString('es-MX')}` : ''}${state.page ? ` · página ${state.page}` : ''}`;
+        } else if (!detailText && state.stage === 'operations') {
+            detailText = `${loaded.toLocaleString('es-MX')} movimientos cargados${total !== null ? ` de ${total.toLocaleString('es-MX')}` : ''}${state.page ? ` · página ${state.page}` : ''}`;
+        }
+        if (detail) detail.textContent = detailText;
+        if (partial && Object.prototype.hasOwnProperty.call(state, 'sales')) {
+            partial.innerHTML = renderSalesProgressPreview(state.sales);
+        }
+    }
+
+    function hideDailyProgress() {
+        const root = document.getElementById(PROGRESS_ID);
+        if (root) {
+            root.style.display = 'none';
+            if (typeof root.setAttribute === 'function') root.setAttribute('aria-busy', 'false');
+        }
+    }
+
     function renderAdvisorTable(rows) {
         if (!rows.length) return '<div class="alert alert-info">No hay ventas por asesor para esta fecha.</div>';
         const tableId = 'servipremiaDailyAdvisorsTable';
@@ -623,7 +780,7 @@
         }
     }
 
-    function renderSaleHistoryTable(sales) {
+    function renderSaleHistoryTable(sales, clientProfile) {
         if (!Array.isArray(sales) || !sales.length) return '<div class="alert alert-info">No hay ventas ERP para mostrar.</div>';
         const ordered = sales.slice().sort((a, b) => eventDateTimestamp(a) - eventDateTimestamp(b));
         const rows = ordered.map(sale => {
@@ -634,11 +791,15 @@
                 ? escapeHtml(folio)
                 : `<button type="button" class="servipremia-open-sale" data-sale-id="${escapeHtml(saleId)}" style="border:0;background:none;padding:0;color:#1e40af;text-decoration:underline;cursor:pointer;font:inherit;font-weight:700;">#${escapeHtml(folio)}</button>`;
             const client = fallbackSaleClient(sale);
+            const displayName = client.name && client.name !== 'Nombre no disponible'
+                ? client.name
+                : (clientProfile && clientProfile.name) || client.name || 'Nombre no disponible';
+            const displayPhone = client.phone || (clientProfile && clientProfile.phone) || '';
             const cancelled = isTrue(sale.is_cancelled);
             return `<tr>
                 <td>${escapeHtml(displayTimestamp(sale.created_at || sale.date))}</td>
                 <td>${saleButton}</td>
-                <td>${escapeHtml(client.name)}${client.phone ? `<br><small>${escapeHtml(client.phone)}</small>` : ''}</td>
+                <td>${escapeHtml(displayName)}${displayPhone ? `<br><small>${escapeHtml(displayPhone)}</small>` : ''}</td>
                 <td style="text-align:right;">${formatCurrency(sale.total)}</td>
                 <td style="text-align:right;">${formatPoints(points.earned)}</td>
                 <td style="text-align:right;">${formatPoints(points.redeemed)}</td>
@@ -653,9 +814,16 @@
         </div>`;
     }
 
+    function isRewardixPointsEvent(operation) {
+        const eventName = String(operation && (operation.eventName || operation.type) || '')
+            .toLowerCase().trim().replace(/\s+/g, ' ');
+        return ['points earned', 'points redeemed', 'puntos ganados', 'puntos canjeados'].includes(eventName);
+    }
+
     function renderRewardixHistoryTable(operations) {
-        if (!Array.isArray(operations) || !operations.length) return '<div class="alert alert-info">No hay movimientos Rewardix registrados para esta tarjeta.</div>';
-        const ordered = operations.slice().sort((a, b) => eventDateTimestamp(a) - eventDateTimestamp(b));
+        const pointOperations = Array.isArray(operations) ? operations.filter(isRewardixPointsEvent) : [];
+        if (!pointOperations.length) return '<div class="alert alert-info">No hay registros de puntos ganados o redimidos para esta tarjeta.</div>';
+        const ordered = pointOperations.slice().sort((a, b) => eventDateTimestamp(a) - eventDateTimestamp(b));
         const rows = ordered.map(operation => {
             const comment = operation.comment || operation.description || operation.note || '—';
             return `<tr>
@@ -731,12 +899,13 @@
 
     function renderClientDetailsBody(client, rewardixHistory, loading, historyError) {
         const operations = Array.isArray(rewardixHistory) ? rewardixHistory : [];
-        const historyHeading = `Historial completo Rewardix${loading ? ' (consultando…)' : ` (${operations.length})`}`;
+        const pointOperations = operations.filter(isRewardixPointsEvent);
+        const historyHeading = `Historial de puntos Rewardix${loading ? ' (consultando…)' : ` (${pointOperations.length})`}`;
         const historyContent = loading
             ? '<div class="alert alert-info">Consultando el historial completo de esta tarjeta en Rewardix…</div>'
             : historyError
                 ? `<div class="alert alert-error">No se pudo consultar el historial completo: ${escapeHtml(historyError)}</div>`
-                : renderRewardixHistoryTable(operations);
+                : renderRewardixHistoryTable(pointOperations);
 
         return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
                 <span class="alert alert-info" style="margin:0;">Teléfono: ${escapeHtml(client.phone || 'No disponible')}</span>
@@ -747,7 +916,7 @@
                 <span class="alert alert-info" style="margin:0;">Saldo al cierre: ${client.closingBalance === null || client.closingBalance === undefined ? 'No disponible' : formatPoints(client.closingBalance)}</span>
             </div>
             <h4 style="color:#1e40af;margin:16px 0 8px;">Ventas ERP del día (${client.sales.length})</h4>
-            ${renderSaleHistoryTable(client.sales)}
+            ${renderSaleHistoryTable(client.sales, client)}
             <h4 style="color:#1e40af;margin:20px 0 8px;">${historyHeading}</h4>
             ${historyContent}`;
     }
@@ -903,6 +1072,7 @@
                 const results = document.getElementById(RESULTS_ID);
                 const error = document.getElementById('servipremiaErrorAlert');
                 if (results) results.style.display = 'none';
+                hideDailyProgress();
                 if (error) error.style.display = 'none';
                 if (typeof showInfo === 'function') showInfo('servipremia', 'Fecha modificada. Pulsa “Consultar” para cargar ese día.');
             });
@@ -932,26 +1102,37 @@
         if (errorAlert) errorAlert.style.display = 'none';
         const infoAlert = document.getElementById('servipremiaInfoAlert');
         if (infoAlert) infoAlert.style.display = 'none';
+        updateDailyProgress({ stage: 'sales', loaded: 0, total: null, page: 0, pageSize: PAGE_SIZE, sales: [] });
 
         try {
             button.innerHTML = 'Consultando ventas del día… <span class="loading-spinner"></span>';
-            const salesResult = await fetchSalesForDay(dateValue);
+            const salesResult = await fetchSalesForDay(dateValue, updateDailyProgress);
             const sales = salesResult.sales;
+            updateDailyProgress({
+                stage: 'sales', loaded: sales.length, total: sales.length,
+                page: 1, totalPages: 1, pageSize: salesResult.pageSize, sales,
+                message: `${sales.length.toLocaleString('es-MX')} ventas ERP cargadas · ${formatCurrency(sales.reduce((sum, sale) => sum + numberValue(sale && sale.total), 0))} acumulados`
+            });
 
             let rewardixCards = [];
             let cardCatalogError = '';
             if (sales.some(sale => sale && normalizeCardId(sale.loyalty_card_id))) {
                 button.innerHTML = 'Consultando catálogo de tarjetas Rewardix… <span class="loading-spinner"></span>';
+                updateDailyProgress({ stage: 'cards', loaded: 0, total: null, page: 0, title: 'Consultando tarjetas y perfiles Rewardix' });
                 try {
-                    rewardixCards = await fetchRewardixCardCatalog();
+                    rewardixCards = await fetchRewardixCardCatalog(updateDailyProgress);
                 } catch (error) {
                     cardCatalogError = error && error.message ? error.message : 'no se pudo consultar el catálogo';
                     console.warn('[SERVIPREMIA] Catálogo de tarjetas Rewardix no disponible:', cardCatalogError);
+                    updateDailyProgress({ stage: 'cards', loaded: 0, total: null, message: `El catálogo falló (${cardCatalogError}); continúo con los movimientos del día.` });
                 }
+            } else {
+                updateDailyProgress({ stage: 'cards', loaded: 0, total: 0, page: 1, totalPages: 1, message: 'No hay tarjetas Rewardix en las ventas; se omite el catálogo.' });
             }
 
             button.innerHTML = 'Consultando movimientos Rewardix… <span class="loading-spinner"></span>';
-            const rewardixOperations = await fetchRewardixOperations(dateValue, dateValue);
+            updateDailyProgress({ stage: 'operations', loaded: 0, total: null, page: 0, title: 'Consultando movimientos Rewardix del día' });
+            const rewardixOperations = await fetchRewardixOperations(dateValue, dateValue, updateDailyProgress);
 
             const pointsEarned = rewardixOperations.filter(operation => {
                 const eventName = String(operation.eventName || '').toLowerCase().trim();
@@ -995,8 +1176,13 @@
             };
 
             renderDailyResults(cachedServipremiaData);
+            hideDailyProgress();
         } catch (error) {
             console.error('[SERVIPREMIA] Error en consulta diaria:', error && error.message ? error.message : 'Error desconocido');
+            updateDailyProgress({
+                stage: 'error', title: 'Consulta interrumpida',
+                message: `${error.message || 'No se pudo completar la consulta del día.'} Los datos parciales siguen visibles arriba.`
+            });
             if (typeof showError === 'function') showError('servipremia', `Error: ${error.message || 'No se pudo completar la consulta del día.'}`);
         } finally {
             button.innerHTML = previousButtonText;

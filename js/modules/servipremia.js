@@ -480,7 +480,7 @@ async function fetchERPOperations(startDate, endDate) {
 }
 
 // ==================== CONSULTAR REWARDIX (operations) ====================
-async function fetchRewardixOperations(startDate, endDate) {
+async function fetchRewardixOperations(startDate, endDate, onPageProgress) {
     try {
         const baseUrl = getRewardixUrl();
         const itemsPerPage = 1000;
@@ -510,9 +510,19 @@ async function fetchRewardixOperations(startDate, endDate) {
 
             allOperations.push(...rows);
 
-            if (payload.meta && payload.meta.totalItems !== undefined) {
+            if (payload.meta && payload.meta.totalItems !== undefined
+                && payload.meta.totalItems !== null && payload.meta.totalItems !== '') {
                 const parsedTotal = Number(payload.meta.totalItems);
                 totalItems = Number.isFinite(parsedTotal) ? parsedTotal : null;
+            }
+
+            const pageCountValue = payload.meta && (payload.meta.totalPages || payload.meta.lastPage || payload.meta.last_page);
+            const reportedPageCount = Number.parseInt(pageCountValue, 10);
+            const totalPages = Number.isFinite(reportedPageCount) && reportedPageCount > 0
+                ? reportedPageCount
+                : Number.isFinite(totalItems) ? Math.max(1, Math.ceil(totalItems / itemsPerPage)) : null;
+            if (typeof onPageProgress === 'function') {
+                onPageProgress({ stage: 'operations', loaded: allOperations.length, total: totalItems, page, totalPages });
             }
 
             if (!rows.length) {

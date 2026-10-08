@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>SERVICEL - Sistema de Reportes</title>
-    <link rel="stylesheet" href="css/styles.css?v=8">
+    <link rel="stylesheet" href="css/styles.css?v=9">
 </head>
 <body>
     <!-- Modal de Login -->
@@ -1272,6 +1272,17 @@
                             </div>
                         </div>
 
+                        <div id="servipremiaDailyProgress" class="servipremia-daily-progress" style="display:none;" role="status" aria-live="polite" aria-busy="true">
+                            <div class="servipremia-progress-heading">
+                                <strong id="servipremiaDailyProgressTitle">Preparando consulta…</strong>
+                                <span id="servipremiaDailyProgressPercent">0%</span>
+                            </div>
+                            <div id="servipremiaDailyProgressTrack" class="servipremia-progress-track" role="progressbar" aria-label="Avance de la consulta" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div id="servipremiaDailyProgressBar" class="servipremia-progress-bar"></div>
+                            </div>
+                            <div id="servipremiaDailyProgressDetail" class="servipremia-progress-detail"></div>
+                            <div id="servipremiaDailyPartialData" class="servipremia-partial-data"></div>
+                        </div>
                         <div id="servipremiaResults" style="display:none;margin-top:20px;"></div>
                     </div>
                 </div>
@@ -1313,8 +1324,8 @@
     <script src="js/modules/timbres_fiscales.js"></script>
     <script src="js/modules/resumen_general.js"></script>
     <script src="js/modules/inventario_sucursal.js"></script>
-    <script src="js/modules/servipremia.js?v=2"></script>
-    <script src="js/modules/servipremia_diario.js?v=3"></script>
+    <script src="js/modules/servipremia.js?v=3"></script>
+    <script src="js/modules/servipremia_diario.js?v=4"></script>
     <script src="js/modules/buscar_serie.js"></script>
     <script src="js/modules/dashboard_admin.js?v=8"></script>
 
